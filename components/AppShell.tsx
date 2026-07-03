@@ -135,6 +135,17 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         >
           <span className="text-base leading-none">◈</span> Deal Research
         </Link>
+        <Link
+          href="/settings"
+          onClick={onNavigate}
+          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+            pathname === "/settings"
+              ? "bg-slate-900/10 dark:bg-white/10 text-slate-900 dark:text-white"
+              : "text-slate-700 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
+          }`}
+        >
+          <span className="text-base leading-none">⚙</span> Instellingen
+        </Link>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pb-3">
