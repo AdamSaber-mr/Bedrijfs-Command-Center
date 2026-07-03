@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import AppShell from "@/components/AppShell";
 import type { ResearchReport, ThreatLevel } from "@/lib/research";
 
 const EXAMPLES = ["ASML", "Adyen", "Coolblue", "Tesla", "Bol.com"];
@@ -272,7 +273,7 @@ function Report({ report, onReset }: { report: ResearchReport; onReset: () => vo
   );
 }
 
-export default function Home() {
+function ResearchView() {
   const [company, setCompany] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [report, setReport] = useState<ResearchReport | null>(null);
@@ -417,5 +418,15 @@ export default function Home() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function ResearchPage() {
+  return (
+    <Suspense>
+      <AppShell>
+        <ResearchView />
+      </AppShell>
+    </Suspense>
   );
 }
