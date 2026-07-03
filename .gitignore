@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# opgeslagen chats / trainingsdata (lokaal, privé)
+/data/
+
 # vercel
 .vercel
 
