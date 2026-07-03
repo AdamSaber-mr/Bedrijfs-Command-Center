@@ -17,15 +17,15 @@ const LOADING_STEPS = [
 ];
 
 const SEVERITY_STYLES: Record<ThreatLevel, string> = {
-  laag: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
-  middel: "bg-amber-500/10 text-amber-300 border-amber-500/30",
-  hoog: "bg-red-500/10 text-red-300 border-red-500/30",
+  laag: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-600/30 dark:border-emerald-500/30",
+  middel: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-600/40 dark:border-amber-500/30",
+  hoog: "bg-red-500/10 text-red-700 dark:text-red-300 border-red-600/30 dark:border-red-500/30",
 };
 
 function scoreColor(score: number) {
-  if (score >= 70) return "text-emerald-300";
-  if (score >= 45) return "text-amber-300";
-  return "text-red-300";
+  if (score >= 70) return "text-emerald-700 dark:text-emerald-300";
+  if (score >= 45) return "text-amber-700 dark:text-amber-300";
+  return "text-red-700 dark:text-red-300";
 }
 
 function scoreBarColor(score: number) {
@@ -47,9 +47,9 @@ function SeverityBadge({ level }: { level: ThreatLevel }) {
 function ScoreCard({ label, score, subtitle }: { label: string; score: number; subtitle: string }) {
   const clamped = Math.max(0, Math.min(100, score));
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+    <div className="rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6">
       <div className="flex items-baseline justify-between gap-4">
-        <h3 className="font-[family-name:var(--font-display)] text-sm font-medium uppercase tracking-wider text-slate-400">
+        <h3 className="font-[family-name:var(--font-display)] text-sm font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400">
           {label}
         </h3>
         <span className={`font-[family-name:var(--font-display)] text-4xl font-bold tabular-nums ${scoreColor(clamped)}`}>
@@ -57,13 +57,13 @@ function ScoreCard({ label, score, subtitle }: { label: string; score: number; s
           <span className="text-base font-normal text-slate-500">/100</span>
         </span>
       </div>
-      <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-white/5">
+      <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/5">
         <div
           className={`h-full rounded-full ${scoreBarColor(clamped)} animate-grow-bar`}
           style={{ width: `${clamped}%` }}
         />
       </div>
-      <p className="mt-3 text-sm text-slate-400">{subtitle}</p>
+      <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">{subtitle}</p>
     </div>
   );
 }
@@ -80,11 +80,11 @@ function SectionCard({
   className?: string;
 }) {
   return (
-    <section className={`rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8 ${className}`}>
+    <section className={`rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6 sm:p-8 ${className}`}>
       {kicker && (
-        <p className="mb-1 text-xs font-medium uppercase tracking-widest text-emerald-400/80">{kicker}</p>
+        <p className="mb-1 text-xs font-medium uppercase tracking-widest text-emerald-600/90 dark:text-emerald-400/80">{kicker}</p>
       )}
-      <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-slate-100">{title}</h2>
+      <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -94,8 +94,8 @@ function BulletList({ items }: { items: string[] }) {
   return (
     <ul className="space-y-2.5">
       {items.map((item, i) => (
-        <li key={i} className="flex gap-3 text-sm leading-relaxed text-slate-300">
-          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/70" />
+        <li key={i} className="flex gap-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600/70 dark:bg-emerald-400/70" />
           {item}
         </li>
       ))}
@@ -120,8 +120,8 @@ function LoadingState({ company }: { company: string }) {
   }, []);
 
   return (
-    <div className="animate-fade-up mx-auto mt-16 max-w-lg rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10">
+    <div className="animate-fade-up mx-auto mt-16 max-w-lg rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-8 text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10">
         <div className="flex gap-1.5">
           {[0, 1, 2].map((i) => (
             <span
@@ -132,13 +132,13 @@ function LoadingState({ company }: { company: string }) {
           ))}
         </div>
       </div>
-      <h2 className="mt-6 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-100">
+      <h2 className="mt-6 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-900 dark:text-slate-100">
         Analyse van {company}
       </h2>
-      <p className="mt-2 text-sm text-emerald-300/90">{LOADING_STEPS[step]}</p>
+      <p className="mt-2 text-sm text-emerald-700/90 dark:text-emerald-300/90">{LOADING_STEPS[step]}</p>
       <p className="mt-6 text-xs text-slate-500">
         Claude doorzoekt actuele bronnen en stelt het rapport samen — dit duurt doorgaans 1 à 3 minuten.
-        <span className="ml-2 font-[family-name:var(--font-mono)] tabular-nums text-slate-400">
+        <span className="ml-2 font-[family-name:var(--font-mono)] tabular-nums text-slate-600 dark:text-slate-400">
           {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
         </span>
       </p>
@@ -157,24 +157,24 @@ function Report({ report, onReset }: { report: ResearchReport; onReset: () => vo
   return (
     <div className="animate-fade-up mx-auto mt-10 max-w-5xl space-y-6 pb-24">
       {/* Bedrijfskop */}
-      <header className="rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/[0.07] to-transparent p-6 sm:p-8">
+      <header className="rounded-2xl border border-slate-900/10 dark:border-white/10 bg-gradient-to-br from-emerald-500/[0.07] to-transparent p-6 sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-emerald-400/80">
+            <p className="text-xs font-medium uppercase tracking-widest text-emerald-600/90 dark:text-emerald-400/80">
               Business-analyse
             </p>
-            <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-white sm:text-4xl">
+            <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-slate-900 dark:text-white sm:text-4xl">
               {report.company.name}
             </h1>
           </div>
           <button
             onClick={onReset}
-            className="rounded-lg border border-white/15 px-4 py-2 text-sm text-slate-300 transition hover:border-emerald-400/50 hover:text-white"
+            className="rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:border-emerald-400/50 hover:text-slate-900 dark:hover:text-white"
           >
             Nieuwe analyse
           </button>
         </div>
-        <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-slate-300">
+        <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
           {report.company.summary}
         </p>
         {meta.length > 0 && (
@@ -182,7 +182,7 @@ function Report({ report, onReset }: { report: ResearchReport; onReset: () => vo
             {meta.map((m) => (
               <div key={m.label}>
                 <dt className="text-xs uppercase tracking-wider text-slate-500">{m.label}</dt>
-                <dd className="mt-0.5 text-sm font-medium text-slate-200">{m.value}</dd>
+                <dd className="mt-0.5 text-sm font-medium text-slate-800 dark:text-slate-200">{m.value}</dd>
               </div>
             ))}
           </dl>
@@ -205,14 +205,14 @@ function Report({ report, onReset }: { report: ResearchReport; onReset: () => vo
 
       {/* Marktpositie */}
       <SectionCard kicker="01 — Markt" title="Marktpositie">
-        <p className="text-[15px] leading-relaxed text-slate-300">{report.market_position.analysis}</p>
+        <p className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">{report.market_position.analysis}</p>
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
           <div>
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">Sterktes</h3>
+            <h3 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-200">Sterktes</h3>
             <BulletList items={report.market_position.strengths} />
           </div>
           <div>
-            <h3 className="mb-3 text-sm font-semibold text-slate-200">Markttrends</h3>
+            <h3 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-200">Markttrends</h3>
             <BulletList items={report.market_position.trends} />
           </div>
         </div>
@@ -222,14 +222,14 @@ function Report({ report, onReset }: { report: ResearchReport; onReset: () => vo
       <SectionCard kicker="02 — Concurrentie" title="Belangrijkste concurrenten">
         <div className="grid gap-4 sm:grid-cols-2">
           {report.competitors.map((c) => (
-            <div key={c.name} className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+            <div key={c.name} className="rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] p-5">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="font-[family-name:var(--font-display)] font-semibold text-slate-100">
+                <h3 className="font-[family-name:var(--font-display)] font-semibold text-slate-900 dark:text-slate-100">
                   {c.name}
                 </h3>
                 <SeverityBadge level={c.threat_level} />
               </div>
-              <p className="mt-2.5 text-sm leading-relaxed text-slate-400">{c.description}</p>
+              <p className="mt-2.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{c.description}</p>
             </div>
           ))}
         </div>
@@ -238,8 +238,8 @@ function Report({ report, onReset }: { report: ResearchReport; onReset: () => vo
 
       {/* Partnership-fit */}
       <SectionCard kicker="03 — Samenwerking" title="Partnership-fit">
-        <p className="text-[15px] leading-relaxed text-slate-300">{report.partnership_fit.analysis}</p>
-        <h3 className="mb-3 mt-6 text-sm font-semibold text-slate-200">Concrete kansen</h3>
+        <p className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">{report.partnership_fit.analysis}</p>
+        <h3 className="mb-3 mt-6 text-sm font-semibold text-slate-800 dark:text-slate-200">Concrete kansen</h3>
         <BulletList items={report.partnership_fit.opportunities} />
       </SectionCard>
 
@@ -247,26 +247,26 @@ function Report({ report, onReset }: { report: ResearchReport; onReset: () => vo
       <SectionCard kicker="04 — Risico" title="Risico's">
         <div className="space-y-3">
           {report.risks.map((r) => (
-            <div key={r.title} className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+            <div key={r.title} className="rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] p-5">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="font-semibold text-slate-100">{r.title}</h3>
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100">{r.title}</h3>
                 <SeverityBadge level={r.severity} />
               </div>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">{r.description}</p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{r.description}</p>
             </div>
           ))}
         </div>
       </SectionCard>
 
       {/* Conclusie */}
-      <section className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] p-6 sm:p-8">
-        <p className="mb-1 text-xs font-medium uppercase tracking-widest text-emerald-400">
+      <section className="rounded-2xl border border-emerald-600/30 dark:border-emerald-500/25 bg-emerald-500/[0.06] p-6 sm:p-8">
+        <p className="mb-1 text-xs font-medium uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
           Strategische conclusie
         </p>
-        <p className="mt-3 text-[15px] leading-relaxed text-slate-200">{report.conclusion}</p>
+        <p className="mt-3 text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">{report.conclusion}</p>
       </section>
 
-      <p className="text-center text-xs text-slate-600">
+      <p className="text-center text-xs text-slate-400 dark:text-slate-600">
         Gegenereerd door Claude · AI-analyse ter ondersteuning, geen vervanging van eigen due diligence
       </p>
     </div>
@@ -318,15 +318,15 @@ function ResearchView() {
       ) : (
         <div className="flex flex-col items-center pt-20 sm:pt-28">
           <div className="animate-fade-up flex max-w-2xl flex-col items-center text-center">
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium tracking-wide text-emerald-300">
+            <span className="rounded-full border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium tracking-wide text-emerald-700 dark:text-emerald-300">
               Aangedreven door Claude
             </span>
-            <h1 className="mt-6 font-[family-name:var(--font-display)] text-4xl font-bold leading-tight text-white sm:text-5xl">
+            <h1 className="mt-6 font-[family-name:var(--font-display)] text-4xl font-bold leading-tight text-slate-900 dark:text-white sm:text-5xl">
               Company &amp; Deal
               <br />
-              <span className="text-emerald-400">Research Assistant</span>
+              <span className="text-emerald-600 dark:text-emerald-400">Research Assistant</span>
             </h1>
-            <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-slate-400">
+            <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-slate-600 dark:text-slate-400">
               Voer een bedrijfsnaam in en ontvang binnen enkele minuten een gestructureerde
               business-analyse: marktpositie, concurrenten, partnership-fit en risico&apos;s —
               onderbouwd met actuele bronnen.
@@ -342,14 +342,14 @@ function ResearchView() {
               className="animate-fade-up mt-10 w-full max-w-xl"
               style={{ animationDelay: "0.1s" }}
             >
-              <div className="flex gap-3 rounded-2xl border border-white/15 bg-white/[0.04] p-2 shadow-2xl shadow-black/40 focus-within:border-emerald-400/50">
+              <div className="flex gap-3 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] p-2 shadow-2xl shadow-slate-900/10 dark:shadow-black/40 focus-within:border-emerald-400/50">
                 <input
                   ref={inputRef}
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                   placeholder="Bijv. ASML, Adyen, Coolblue…"
                   autoFocus
-                  className="w-full bg-transparent px-4 py-2.5 text-[15px] text-white placeholder:text-slate-500 focus:outline-none"
+                  className="w-full bg-transparent px-4 py-2.5 text-[15px] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
                 />
                 <button
                   type="submit"
@@ -370,7 +370,7 @@ function ResearchView() {
                       setCompany(ex);
                       analyze(ex);
                     }}
-                    className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:border-emerald-400/40 hover:text-white"
+                    className="rounded-full border border-slate-900/10 dark:border-white/10 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 transition hover:border-emerald-400/40 hover:text-slate-900 dark:hover:text-white"
                   >
                     {ex}
                   </button>
@@ -378,7 +378,7 @@ function ResearchView() {
               </div>
 
               {status === "error" && (
-                <p className="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
+                <p className="mt-5 rounded-xl border border-red-600/30 dark:border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-700 dark:text-red-300">
                   {error}
                 </p>
               )}
@@ -406,11 +406,11 @@ function ResearchView() {
                   text: "Concrete samenwerkingskansen en het ideale partnerprofiel voor dealbeslissingen.",
                 },
               ].map((f) => (
-                <div key={f.title} className="rounded-xl border border-white/10 bg-white/[0.02] p-5 text-left">
-                  <h3 className="font-[family-name:var(--font-display)] text-sm font-semibold text-slate-100">
+                <div key={f.title} className="rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] p-5 text-left">
+                  <h3 className="font-[family-name:var(--font-display)] text-sm font-semibold text-slate-900 dark:text-slate-100">
                     {f.title}
                   </h3>
-                  <p className="mt-2 text-xs leading-relaxed text-slate-400">{f.text}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">{f.text}</p>
                 </div>
               ))}
             </div>

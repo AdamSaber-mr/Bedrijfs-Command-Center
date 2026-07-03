@@ -17,7 +17,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-[15px] leading-relaxed text-slate-100">
+        <div className="max-w-[85%] rounded-2xl rounded-br-md border border-emerald-600/30 dark:border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-[15px] leading-relaxed text-slate-900 dark:text-slate-100">
           <p className="whitespace-pre-wrap">{message.content}</p>
         </div>
       </div>
@@ -25,10 +25,10 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   }
   return (
     <div className="flex gap-3">
-      <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-xs font-bold text-emerald-300">
+      <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10 text-xs font-bold text-emerald-700 dark:text-emerald-300">
         AI
       </div>
-      <div className="markdown min-w-0 max-w-[85%] text-[15px] leading-relaxed text-slate-200">
+      <div className="markdown min-w-0 max-w-[85%] text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">
         {message.content ? (
           <ReactMarkdown>{message.content}</ReactMarkdown>
         ) : (
@@ -145,13 +145,13 @@ function ChatView() {
       <div className="flex-1 overflow-y-auto">
         {empty ? (
           <div className="animate-fade-up mx-auto flex h-full max-w-2xl flex-col items-center justify-center px-6 text-center">
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium tracking-wide text-emerald-300">
+            <span className="rounded-full border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium tracking-wide text-emerald-700 dark:text-emerald-300">
               Aangedreven door Claude
             </span>
-            <h1 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-bold text-white sm:text-4xl">
-              Waarmee kan ik je <span className="text-emerald-400">helpen</span>?
+            <h1 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-bold text-slate-900 dark:text-white sm:text-4xl">
+              Waarmee kan ik je <span className="text-emerald-600 dark:text-emerald-400">helpen</span>?
             </h1>
-            <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-400">
+            <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-600 dark:text-slate-400">
               Elke chat wordt automatisch opgeslagen en is via de sidebar te
               exporteren als trainingsdata voor je eigen model.
             </p>
@@ -160,7 +160,7 @@ function ChatView() {
                 <button
                   key={s}
                   onClick={() => send(s)}
-                  className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm text-slate-300 transition hover:border-emerald-400/40 hover:text-white"
+                  className="rounded-xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 text-left text-sm text-slate-700 dark:text-slate-300 transition hover:border-emerald-400/40 hover:text-slate-900 dark:hover:text-white"
                 >
                   {s}
                 </button>
@@ -177,7 +177,7 @@ function ChatView() {
         )}
       </div>
 
-      <div className="border-t border-white/10 bg-black/20 px-4 py-4 sm:px-6">
+      <div className="border-t border-slate-900/10 dark:border-white/10 bg-slate-50/80 dark:bg-black/20 px-4 py-4 sm:px-6">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -186,11 +186,11 @@ function ChatView() {
           className="mx-auto max-w-3xl"
         >
           {error && (
-            <p className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">
+            <p className="mb-3 rounded-xl border border-red-600/30 dark:border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-700 dark:text-red-300">
               {error}
             </p>
           )}
-          <div className="flex items-end gap-3 rounded-2xl border border-white/15 bg-white/[0.04] p-2 focus-within:border-emerald-400/50">
+          <div className="flex items-end gap-3 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] p-2 focus-within:border-emerald-400/50">
             <textarea
               ref={inputRef}
               value={input}
@@ -204,7 +204,7 @@ function ChatView() {
               placeholder="Stel een vraag… (Enter om te versturen)"
               rows={Math.min(6, Math.max(1, input.split("\n").length))}
               autoFocus
-              className="max-h-40 w-full resize-none bg-transparent px-3 py-2 text-[15px] text-white placeholder:text-slate-500 focus:outline-none"
+              className="max-h-40 w-full resize-none bg-transparent px-3 py-2 text-[15px] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
             />
             <button
               type="submit"
@@ -214,7 +214,7 @@ function ChatView() {
               {busy ? "…" : "Verstuur"}
             </button>
           </div>
-          <p className="mt-2 text-center text-[11px] text-slate-600">
+          <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-600">
             Chats worden lokaal opgeslagen in <code>data/chats/</code> en zijn exporteerbaar als JSONL-trainingsdata
           </p>
         </form>
