@@ -1,65 +1,421 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import type { ResearchReport, ThreatLevel } from "@/lib/research";
+
+const EXAMPLES = ["ASML", "Adyen", "Coolblue", "Tesla", "Bol.com"];
+
+const LOADING_STEPS = [
+  "Bedrijfsprofiel opzoeken…",
+  "Actuele bronnen doorzoeken…",
+  "Marktpositie analyseren…",
+  "Concurrentielandschap in kaart brengen…",
+  "Partnership-fit beoordelen…",
+  "Risico's wegen…",
+  "Rapport samenstellen…",
+];
+
+const SEVERITY_STYLES: Record<ThreatLevel, string> = {
+  laag: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
+  middel: "bg-amber-500/10 text-amber-300 border-amber-500/30",
+  hoog: "bg-red-500/10 text-red-300 border-red-500/30",
+};
+
+function scoreColor(score: number) {
+  if (score >= 70) return "text-emerald-300";
+  if (score >= 45) return "text-amber-300";
+  return "text-red-300";
+}
+
+function scoreBarColor(score: number) {
+  if (score >= 70) return "bg-emerald-400";
+  if (score >= 45) return "bg-amber-400";
+  return "bg-red-400";
+}
+
+function SeverityBadge({ level }: { level: ThreatLevel }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${SEVERITY_STYLES[level] ?? SEVERITY_STYLES.middel}`}
+    >
+      {level}
+    </span>
+  );
+}
+
+function ScoreCard({ label, score, subtitle }: { label: string; score: number; subtitle: string }) {
+  const clamped = Math.max(0, Math.min(100, score));
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+      <div className="flex items-baseline justify-between gap-4">
+        <h3 className="font-[family-name:var(--font-display)] text-sm font-medium uppercase tracking-wider text-slate-400">
+          {label}
+        </h3>
+        <span className={`font-[family-name:var(--font-display)] text-4xl font-bold tabular-nums ${scoreColor(clamped)}`}>
+          {clamped}
+          <span className="text-base font-normal text-slate-500">/100</span>
+        </span>
+      </div>
+      <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-white/5">
+        <div
+          className={`h-full rounded-full ${scoreBarColor(clamped)} animate-grow-bar`}
+          style={{ width: `${clamped}%` }}
+        />
+      </div>
+      <p className="mt-3 text-sm text-slate-400">{subtitle}</p>
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  kicker,
+  children,
+  className = "",
+}: {
+  title: string;
+  kicker?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8 ${className}`}>
+      {kicker && (
+        <p className="mb-1 text-xs font-medium uppercase tracking-widest text-emerald-400/80">{kicker}</p>
+      )}
+      <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-slate-100">{title}</h2>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+function BulletList({ items }: { items: string[] }) {
+  return (
+    <ul className="space-y-2.5">
+      {items.map((item, i) => (
+        <li key={i} className="flex gap-3 text-sm leading-relaxed text-slate-300">
+          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/70" />
+          {item}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function LoadingState({ company }: { company: string }) {
+  const [step, setStep] = useState(0);
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const stepTimer = setInterval(
+      () => setStep((s) => Math.min(s + 1, LOADING_STEPS.length - 1)),
+      9000
+    );
+    const secTimer = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => {
+      clearInterval(stepTimer);
+      clearInterval(secTimer);
+    };
+  }, []);
+
+  return (
+    <div className="animate-fade-up mx-auto mt-16 max-w-lg rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10">
+        <div className="flex gap-1.5">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="animate-pulse-dot h-2 w-2 rounded-full bg-emerald-400"
+              style={{ animationDelay: `${i * 0.25}s` }}
+            />
+          ))}
+        </div>
+      </div>
+      <h2 className="mt-6 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-100">
+        Analyse van {company}
+      </h2>
+      <p className="mt-2 text-sm text-emerald-300/90">{LOADING_STEPS[step]}</p>
+      <p className="mt-6 text-xs text-slate-500">
+        Claude doorzoekt actuele bronnen en stelt het rapport samen — dit duurt doorgaans 1 à 3 minuten.
+        <span className="ml-2 font-[family-name:var(--font-mono)] tabular-nums text-slate-400">
+          {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+        </span>
+      </p>
+    </div>
+  );
+}
+
+function Report({ report, onReset }: { report: ResearchReport; onReset: () => void }) {
+  const meta = [
+    { label: "Sector", value: report.company.industry },
+    { label: "Hoofdkantoor", value: report.company.headquarters },
+    { label: "Opgericht", value: report.company.founded },
+    { label: "Omvang", value: report.company.size },
+  ].filter((m) => m.value && m.value.toLowerCase() !== "onbekend");
+
+  return (
+    <div className="animate-fade-up mx-auto mt-10 max-w-5xl space-y-6 pb-24">
+      {/* Bedrijfskop */}
+      <header className="rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/[0.07] to-transparent p-6 sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-widest text-emerald-400/80">
+              Business-analyse
+            </p>
+            <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-white sm:text-4xl">
+              {report.company.name}
+            </h1>
+          </div>
+          <button
+            onClick={onReset}
+            className="rounded-lg border border-white/15 px-4 py-2 text-sm text-slate-300 transition hover:border-emerald-400/50 hover:text-white"
+          >
+            Nieuwe analyse
+          </button>
+        </div>
+        <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-slate-300">
+          {report.company.summary}
+        </p>
+        {meta.length > 0 && (
+          <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-3">
+            {meta.map((m) => (
+              <div key={m.label}>
+                <dt className="text-xs uppercase tracking-wider text-slate-500">{m.label}</dt>
+                <dd className="mt-0.5 text-sm font-medium text-slate-200">{m.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </header>
+
+      {/* Scores */}
+      <div className="grid gap-6 sm:grid-cols-2">
+        <ScoreCard
+          label="Marktpositie"
+          score={report.market_position.score}
+          subtitle={report.market_position.position}
+        />
+        <ScoreCard
+          label="Partnership-fit"
+          score={report.partnership_fit.score}
+          subtitle={report.partnership_fit.ideal_partner_profile}
+        />
+      </div>
+
+      {/* Marktpositie */}
+      <SectionCard kicker="01 — Markt" title="Marktpositie">
+        <p className="text-[15px] leading-relaxed text-slate-300">{report.market_position.analysis}</p>
+        <div className="mt-6 grid gap-6 sm:grid-cols-2">
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-slate-200">Sterktes</h3>
+            <BulletList items={report.market_position.strengths} />
+          </div>
+          <div>
+            <h3 className="mb-3 text-sm font-semibold text-slate-200">Markttrends</h3>
+            <BulletList items={report.market_position.trends} />
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Concurrenten */}
+      <SectionCard kicker="02 — Concurrentie" title="Belangrijkste concurrenten">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {report.competitors.map((c) => (
+            <div key={c.name} className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-[family-name:var(--font-display)] font-semibold text-slate-100">
+                  {c.name}
+                </h3>
+                <SeverityBadge level={c.threat_level} />
+              </div>
+              <p className="mt-2.5 text-sm leading-relaxed text-slate-400">{c.description}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 text-xs text-slate-500">Badge = concurrentiedreiging voor {report.company.name}</p>
+      </SectionCard>
+
+      {/* Partnership-fit */}
+      <SectionCard kicker="03 — Samenwerking" title="Partnership-fit">
+        <p className="text-[15px] leading-relaxed text-slate-300">{report.partnership_fit.analysis}</p>
+        <h3 className="mb-3 mt-6 text-sm font-semibold text-slate-200">Concrete kansen</h3>
+        <BulletList items={report.partnership_fit.opportunities} />
+      </SectionCard>
+
+      {/* Risico's */}
+      <SectionCard kicker="04 — Risico" title="Risico's">
+        <div className="space-y-3">
+          {report.risks.map((r) => (
+            <div key={r.title} className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-slate-100">{r.title}</h3>
+                <SeverityBadge level={r.severity} />
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{r.description}</p>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* Conclusie */}
+      <section className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] p-6 sm:p-8">
+        <p className="mb-1 text-xs font-medium uppercase tracking-widest text-emerald-400">
+          Strategische conclusie
+        </p>
+        <p className="mt-3 text-[15px] leading-relaxed text-slate-200">{report.conclusion}</p>
+      </section>
+
+      <p className="text-center text-xs text-slate-600">
+        Gegenereerd door Claude · AI-analyse ter ondersteuning, geen vervanging van eigen due diligence
+      </p>
+    </div>
+  );
+}
 
 export default function Home() {
+  const [company, setCompany] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [report, setReport] = useState<ResearchReport | null>(null);
+  const [error, setError] = useState("");
+  const [analyzedCompany, setAnalyzedCompany] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function analyze(name: string) {
+    const trimmed = name.trim();
+    if (trimmed.length < 2 || status === "loading") return;
+    setStatus("loading");
+    setAnalyzedCompany(trimmed);
+    setError("");
+    try {
+      const res = await fetch("/api/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Onbekende fout");
+      setReport(data.report);
+      setStatus("done");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Er ging iets mis");
+      setStatus("error");
+    }
+  }
+
+  function reset() {
+    setStatus("idle");
+    setReport(null);
+    setCompany("");
+    setError("");
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 sm:px-8">
+      {status === "done" && report ? (
+        <Report report={report} onReset={reset} />
+      ) : (
+        <div className="flex flex-col items-center pt-20 sm:pt-28">
+          <div className="animate-fade-up flex max-w-2xl flex-col items-center text-center">
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium tracking-wide text-emerald-300">
+              Aangedreven door Claude
+            </span>
+            <h1 className="mt-6 font-[family-name:var(--font-display)] text-4xl font-bold leading-tight text-white sm:text-5xl">
+              Company &amp; Deal
+              <br />
+              <span className="text-emerald-400">Research Assistant</span>
+            </h1>
+            <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-slate-400">
+              Voer een bedrijfsnaam in en ontvang binnen enkele minuten een gestructureerde
+              business-analyse: marktpositie, concurrenten, partnership-fit en risico&apos;s —
+              onderbouwd met actuele bronnen.
+            </p>
+          </div>
+
+          {status !== "loading" && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                analyze(company);
+              }}
+              className="animate-fade-up mt-10 w-full max-w-xl"
+              style={{ animationDelay: "0.1s" }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              <div className="flex gap-3 rounded-2xl border border-white/15 bg-white/[0.04] p-2 shadow-2xl shadow-black/40 focus-within:border-emerald-400/50">
+                <input
+                  ref={inputRef}
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  placeholder="Bijv. ASML, Adyen, Coolblue…"
+                  autoFocus
+                  className="w-full bg-transparent px-4 py-2.5 text-[15px] text-white placeholder:text-slate-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={company.trim().length < 2}
+                  className="shrink-0 rounded-xl bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Analyseer
+                </button>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                <span className="text-xs text-slate-500">Probeer:</span>
+                {EXAMPLES.map((ex) => (
+                  <button
+                    key={ex}
+                    type="button"
+                    onClick={() => {
+                      setCompany(ex);
+                      analyze(ex);
+                    }}
+                    className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:border-emerald-400/40 hover:text-white"
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
+
+              {status === "error" && (
+                <p className="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
+                  {error}
+                </p>
+              )}
+            </form>
+          )}
+
+          {status === "loading" && <LoadingState company={analyzedCompany} />}
+
+          {status !== "loading" && (
+            <div
+              className="animate-fade-up mt-16 grid max-w-3xl gap-4 pb-20 sm:grid-cols-3"
+              style={{ animationDelay: "0.2s" }}
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              {[
+                {
+                  title: "Marktpositie",
+                  text: "Score, sterktes en relevante markttrends op basis van actuele informatie.",
+                },
+                {
+                  title: "Concurrentie & risico's",
+                  text: "De belangrijkste concurrenten en risico's, gewogen op dreigingsniveau.",
+                },
+                {
+                  title: "Partnership-fit",
+                  text: "Concrete samenwerkingskansen en het ideale partnerprofiel voor dealbeslissingen.",
+                },
+              ].map((f) => (
+                <div key={f.title} className="rounded-xl border border-white/10 bg-white/[0.02] p-5 text-left">
+                  <h3 className="font-[family-name:var(--font-display)] text-sm font-semibold text-slate-100">
+                    {f.title}
+                  </h3>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-400">{f.text}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      )}
+    </main>
   );
 }
