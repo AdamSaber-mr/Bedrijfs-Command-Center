@@ -1,9 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getChat, newChat, saveChat } from "@/lib/chatStore";
+import { getSettings } from "@/lib/settings";
 
 export const maxDuration = 300;
-
-const MODEL = "claude-opus-4-8";
 
 const SYSTEM_PROMPT = `Je bent een zakelijke AI-assistent in het Bedrijfs Command Center van Adam.
 Je helpt met business-vragen, strategie, analyses en algemene ondersteuning.
@@ -35,13 +34,20 @@ export async function POST(request: Request) {
   chat.messages.push({ role: "user", content: userMessage });
 
   const client = new Anthropic();
+  const settings = await getSettings();
+  const system = settings.customInstructions
+    ? `${SYSTEM_PROMPT}\n\nAanvullende instructies van de gebruiker:\n${settings.customInstructions}`
+    : SYSTEM_PROMPT;
 
   try {
     const stream = client.messages.stream({
-      model: MODEL,
-      max_tokens: 4096,
-      thinking: { type: "adaptive" },
-      system: SYSTEM_PROMPT,
+      model: settings.model,
+      max_tokens: settings.maxTokens,
+      // Haiku ondersteunt geen adaptive thinking — parameter dan weglaten
+      ...(settings.model.includes("haiku")
+        ? {}
+        : { thinking: { type: "adaptive" as const } }),
+      system,
       messages: chat.messages.map((m) => ({ role: m.role, content: m.content })),
     });
 
