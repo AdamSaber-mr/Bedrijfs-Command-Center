@@ -108,8 +108,9 @@ export async function POST(request: Request) {
       response = await runAnalysis(client, name, true);
     } catch (err) {
       // Mocht de combinatie webzoeken + structured output geweigerd worden,
-      // val dan terug op een analyse zonder webzoeken.
-      if (err instanceof Anthropic.BadRequestError) {
+      // val dan terug op een analyse zonder webzoeken. Billing-fouten
+      // hebben daar niets aan, dus die gaan direct door naar de foutafhandeling.
+      if (err instanceof Anthropic.BadRequestError && !err.message.includes("credit balance")) {
         response = await runAnalysis(client, name, false);
       } else {
         throw err;
@@ -135,6 +136,12 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Ongeldige API-sleutel. Controleer ANTHROPIC_API_KEY in .env.local" },
         { status: 500 }
+      );
+    }
+    if (err instanceof Anthropic.APIError && err.message.includes("credit balance")) {
+      return NextResponse.json(
+        { error: "Onvoldoende tegoed op je Anthropic-account. Koop credits via platform.claude.com → Plans & Billing." },
+        { status: 402 }
       );
     }
     if (err instanceof Anthropic.RateLimitError) {
