@@ -1,6 +1,14 @@
 @import "tailwindcss";
 
+/* Dark mode via .dark class op <html> i.p.v. systeemvoorkeur */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
+  --background: #f4f6f9;
+  --foreground: #0f172a;
+}
+
+.dark {
   --background: #0a0f1a;
   --foreground: #e7ecf4;
 }
@@ -18,9 +26,14 @@ body {
   color: var(--foreground);
   font-family: var(--font-body), system-ui, sans-serif;
   background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16, 185, 129, 0.07), transparent);
+  background-attachment: fixed;
+}
+
+.dark body {
+  background-image:
     radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16, 185, 129, 0.09), transparent),
     radial-gradient(ellipse 60% 40% at 90% 10%, rgba(56, 189, 248, 0.05), transparent);
-  background-attachment: fixed;
 }
 
 ::selection {
@@ -59,7 +72,7 @@ body {
   animation: grow-bar 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Markdown-weergave in chatberichten */
+/* Markdown-weergave in chatberichten — licht als basis, .dark als override */
 .markdown > * + * {
   margin-top: 0.75em;
 }
@@ -69,6 +82,12 @@ body {
 .markdown h3 {
   font-family: var(--font-display), system-ui, sans-serif;
   font-weight: 600;
+  color: #0f172a;
+}
+
+.dark .markdown h1,
+.dark .markdown h2,
+.dark .markdown h3 {
   color: #f1f5f9;
 }
 
@@ -85,28 +104,40 @@ body {
 .markdown ol { list-style: decimal; }
 .markdown li + li { margin-top: 0.3em; }
 
-.markdown strong { color: #f1f5f9; }
+.markdown strong { color: #0f172a; }
+.dark .markdown strong { color: #f1f5f9; }
 
 .markdown a {
-  color: #34d399;
+  color: #059669;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
+.dark .markdown a { color: #34d399; }
+
 .markdown code {
   font-family: var(--font-mono), monospace;
   font-size: 0.85em;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.07);
   border-radius: 4px;
   padding: 0.15em 0.4em;
 }
 
+.dark .markdown code {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .markdown pre {
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 12px;
   padding: 1em;
   overflow-x: auto;
+}
+
+.dark .markdown pre {
+  background: rgba(0, 0, 0, 0.45);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .markdown pre code {
@@ -117,8 +148,10 @@ body {
 .markdown blockquote {
   border-left: 3px solid rgba(16, 185, 129, 0.5);
   padding-left: 1em;
-  color: #94a3b8;
+  color: #475569;
 }
+
+.dark .markdown blockquote { color: #94a3b8; }
 
 .markdown table {
   width: 100%;
@@ -128,12 +161,22 @@ body {
 
 .markdown th,
 .markdown td {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(15, 23, 42, 0.12);
   padding: 0.5em 0.75em;
   text-align: left;
 }
 
+.dark .markdown th,
+.dark .markdown td {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
 .markdown th {
+  background: rgba(15, 23, 42, 0.03);
+  color: #0f172a;
+}
+
+.dark .markdown th {
   background: rgba(255, 255, 255, 0.04);
   color: #f1f5f9;
 }

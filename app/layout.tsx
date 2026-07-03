@@ -31,8 +31,17 @@ export default function RootLayout({
   return (
     <html
       lang="nl"
+      suppressHydrationWarning
       className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable} h-full antialiased`}
     >
+      <head>
+        {/* Zet het thema vóór de eerste render om flikkeren te voorkomen; donker is de default */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{if(localStorage.getItem("theme")!=="light"){document.documentElement.classList.add("dark")}}catch(e){document.documentElement.classList.add("dark")}})();`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
