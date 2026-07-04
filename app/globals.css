@@ -221,6 +221,22 @@ body {
 .stagger-children > *:nth-child(8) { animation-delay: 0.35s; }
 .stagger-children > *:nth-child(n + 9) { animation-delay: 0.4s; }
 
+/* Printen (rapport als PDF): navigatie weg, containers uitklappen, licht */
+@media print {
+  body {
+    background: #fff !important;
+    color: #0f172a;
+  }
+  aside {
+    display: none !important;
+  }
+  * {
+    animation: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+  }
+}
+
 /* Respecteer verminderde-bewegingsvoorkeur van het OS */
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -172,6 +172,20 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
     }
   }
 
+  function printReport() {
+    // Print altijd in licht thema; zet donker daarna terug.
+    const wasDark = document.documentElement.classList.contains("dark");
+    document.documentElement.classList.remove("dark");
+    window.addEventListener(
+      "afterprint",
+      () => {
+        if (wasDark) document.documentElement.classList.add("dark");
+      },
+      { once: true }
+    );
+    setTimeout(() => window.print(), 50);
+  }
+
   const meta = [
     { label: "Sector", value: report.company.industry },
     { label: "Hoofdkantoor", value: report.company.headquarters },
@@ -197,7 +211,13 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
               {report.company.name}
             </h1>
           </div>
-          <div className="flex flex-wrap gap-2.5">
+          <div className="flex flex-wrap gap-2.5 print:hidden">
+            <button
+              onClick={printReport}
+              className="rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:border-accent-400/50 hover:text-slate-900 dark:hover:text-white"
+            >
+              ⎙ Opslaan als PDF
+            </button>
             <button
               onClick={chatAboutReport}
               disabled={openingChat}
