@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { RESEARCH_SCHEMA, type ResearchReport } from "@/lib/research";
+import { saveReport, type Citation } from "@/lib/reportStore";
 
 // Analyses met webzoeken kunnen enkele minuten duren.
 export const maxDuration = 300;
@@ -36,6 +37,43 @@ function extractReport(response: Anthropic.Message): ResearchReport {
   throw new Error("Geen geldige JSON in het modelantwoord gevonden");
 }
 
+// Verzamelt geciteerde bronnen uit alle assistant-content (ook tussenbeurten
+// bij pause_turn), zodat het rapport toont waarop het gebaseerd is.
+function extractCitations(allContent: Anthropic.ContentBlock[]): Citation[] {
+  const seen = new Map<string, Citation>();
+  const add = (url: unknown, title: unknown) => {
+    if (typeof url !== "string" || !url) return;
+    if (!seen.has(url)) {
+      seen.set(url, {
+        url,
+        title: typeof title === "string" && title ? title : url,
+      });
+    }
+  };
+
+  // Voorkeur: bronnen die het model daadwerkelijk citeert in tekstblokken.
+  for (const block of allContent) {
+    if (block.type === "text" && Array.isArray(block.citations)) {
+      for (const c of block.citations) {
+        if (c.type === "web_search_result_location") add(c.url, c.title);
+      }
+    }
+  }
+
+  // Terugval: gevonden zoekresultaten als er geen expliciete citaties zijn.
+  if (seen.size === 0) {
+    for (const block of allContent) {
+      if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
+        for (const item of block.content) {
+          if (item.type === "web_search_result") add(item.url, item.title);
+        }
+      }
+    }
+  }
+
+  return [...seen.values()].slice(0, 12);
+}
+
 async function runAnalysis(client: Anthropic, company: string, useWebSearch: boolean) {
   const baseParams = {
     model: MODEL,
@@ -63,6 +101,8 @@ async function runAnalysis(client: Anthropic, company: string, useWebSearch: boo
   });
 
   // Server-side tools kunnen pauzeren; opnieuw insturen om te hervatten.
+  // Bewaar de content van álle beurten, zodat citaties niet verloren gaan.
+  let allContent: Anthropic.ContentBlock[] = [...response.content];
   let continuations = 0;
   while (response.stop_reason === "pause_turn" && continuations < 4) {
     messages = [...messages, { role: "assistant", content: response.content }];
@@ -71,10 +111,11 @@ async function runAnalysis(client: Anthropic, company: string, useWebSearch: boo
       messages,
       tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 6 }],
     });
+    allContent = [...allContent, ...response.content];
     continuations++;
   }
 
-  return response;
+  return { response, allContent };
 }
 
 export async function POST(request: Request) {
@@ -103,20 +144,21 @@ export async function POST(request: Request) {
   const name = company.trim().slice(0, 120);
 
   try {
-    let response: Anthropic.Message;
+    let result: Awaited<ReturnType<typeof runAnalysis>>;
     try {
-      response = await runAnalysis(client, name, true);
+      result = await runAnalysis(client, name, true);
     } catch (err) {
       // Mocht de combinatie webzoeken + structured output geweigerd worden,
       // val dan terug op een analyse zonder webzoeken. Billing-fouten
       // hebben daar niets aan, dus die gaan direct door naar de foutafhandeling.
       if (err instanceof Anthropic.BadRequestError && !err.message.includes("credit balance")) {
-        response = await runAnalysis(client, name, false);
+        result = await runAnalysis(client, name, false);
       } else {
         throw err;
       }
     }
 
+    const { response, allContent } = result;
     if (response.stop_reason === "refusal") {
       return NextResponse.json(
         { error: "Deze aanvraag kon niet worden verwerkt. Probeer een andere bedrijfsnaam." },
@@ -130,7 +172,9 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ report: extractReport(response) });
+    const report = extractReport(response);
+    const saved = await saveReport(name, report, extractCitations(allContent));
+    return NextResponse.json({ saved });
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {
       return NextResponse.json(
