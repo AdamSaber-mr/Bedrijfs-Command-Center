@@ -6,14 +6,7 @@ import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import type { ChatSummary } from "@/lib/chatStore";
 import type { ReportSummary } from "@/lib/reportStore";
-
-function greeting() {
-  const hour = new Date().getHours();
-  if (hour < 6) return "Goedenacht";
-  if (hour < 12) return "Goedemorgen";
-  if (hour < 18) return "Goedemiddag";
-  return "Goedenavond";
-}
+import { useGreeting } from "@/lib/greeting";
 
 function relativeTime(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -34,25 +27,12 @@ function scoreColor(score: number) {
   return "text-red-700 dark:text-red-300";
 }
 
-function StatTile({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5">
-      <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-        {label}
-      </p>
-      <p className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tabular-nums text-slate-900 dark:text-white">
-        {value}
-      </p>
-      <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">{hint}</p>
-    </div>
-  );
-}
-
 function DashboardView() {
   const router = useRouter();
   const [chats, setChats] = useState<ChatSummary[] | null>(null);
   const [reports, setReports] = useState<ReportSummary[] | null>(null);
   const [question, setQuestion] = useState("");
+  const greeting = useGreeting();
 
   useEffect(() => {
     (async () => {
@@ -82,54 +62,58 @@ function DashboardView() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8">
-      {/* Kop + directe vraag */}
-      <header className="animate-fade-up">
-        <p className="text-xs font-medium uppercase tracking-widest text-emerald-600/90 dark:text-emerald-400/80">
-          Dashboard
-        </p>
-        <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-slate-900 dark:text-white sm:text-4xl">
-          {greeting()}, Adam
+    <main className="mx-auto w-full max-w-5xl px-4 pb-10 sm:px-8">
+      {/* Hero: begroeting + directe vraag */}
+      <header className="flex flex-col items-center pt-20 text-center sm:pt-28">
+        <h1
+          key={greeting}
+          className="animate-fade-up min-h-[44px] font-[family-name:var(--font-display)] text-3xl font-semibold text-slate-900 dark:text-white sm:text-4xl"
+        >
+          {greeting}
         </h1>
-        <form onSubmit={ask} className="mt-6 max-w-2xl">
-          <div className="flex gap-3 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] p-2 shadow-lg shadow-slate-900/5 dark:shadow-black/30 focus-within:border-emerald-400/50">
+        <form onSubmit={ask} className="animate-fade-up mt-8 w-full max-w-2xl" style={{ animationDelay: "0.06s" }}>
+          <div className="flex gap-2 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] p-2.5 focus-within:border-emerald-400/50">
             <input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Stel direct een vraag aan je AI-assistent…"
-              className="w-full bg-transparent px-4 py-2.5 text-[15px] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
+              placeholder="Hoe kan ik je vandaag helpen?"
+              autoFocus
+              className="w-full bg-transparent px-3 py-2 text-[15px] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
             />
             <button
               type="submit"
               disabled={question.trim().length === 0}
-              className="shrink-0 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Verstuur"
+              className="shrink-0 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Vraag
+              ↑
             </button>
           </div>
         </form>
+        <div className="animate-fade-up mt-5 flex flex-wrap justify-center gap-2" style={{ animationDelay: "0.12s" }}>
+          <Link
+            href="/chat"
+            className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-emerald-400/40 hover:text-slate-800 dark:hover:text-slate-200"
+          >
+            ＋ Nieuwe chat
+          </Link>
+          <Link
+            href="/research"
+            className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-emerald-400/40 hover:text-slate-800 dark:hover:text-slate-200"
+          >
+            Deal Research
+          </Link>
+        </div>
+        {chats !== null && reports !== null && (chats.length > 0 || reports.length > 0) && (
+          <p className="animate-fade-up mt-8 text-xs text-slate-400 dark:text-slate-600" style={{ animationDelay: "0.18s" }}>
+            {chats.length} {chats.length === 1 ? "chat" : "chats"} · {totalMessages}{" "}
+            {totalMessages === 1 ? "bericht" : "berichten"} · {reports.length}{" "}
+            {reports.length === 1 ? "rapport" : "rapporten"}
+          </p>
+        )}
       </header>
 
-      {/* Statistieken */}
-      <div className="animate-fade-up mt-10 grid gap-4 sm:grid-cols-3" style={{ animationDelay: "0.08s" }}>
-        <StatTile
-          label="Chats"
-          value={chats === null ? "–" : String(chats.length)}
-          hint="opgeslagen gesprekken"
-        />
-        <StatTile
-          label="Berichten"
-          value={chats === null ? "–" : String(totalMessages)}
-          hint="bruikbaar als trainingsdata"
-        />
-        <StatTile
-          label="Deal-rapporten"
-          value={reports === null ? "–" : String(reports.length)}
-          hint="opgeslagen analyses"
-        />
-      </div>
-
-      <div className="mt-10 grid gap-8 lg:grid-cols-2">
+      <div className="mt-14 grid gap-8 lg:grid-cols-2">
         {/* Recente chats */}
         <section className="animate-fade-up" style={{ animationDelay: "0.14s" }}>
           <div className="flex items-baseline justify-between">

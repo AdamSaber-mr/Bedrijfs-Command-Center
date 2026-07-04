@@ -6,12 +6,13 @@ import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import AppShell, { CHATS_UPDATED_EVENT } from "@/components/AppShell";
 import type { ChatMessage } from "@/lib/chatStore";
+import { useGreeting } from "@/lib/greeting";
 
 const SUGGESTIONS = [
-  "Schrijf een professionele e-mail naar een potentiële partner",
-  "Wat zijn de grootste trends in de Nederlandse e-commerce?",
-  "Help me een SWOT-analyse maken voor mijn bedrijfsidee",
-  "Leg uit hoe ik een goed verdienmodel kies",
+  "Schrijf een professionele e-mail",
+  "Trends in Nederlandse e-commerce",
+  "Maak een SWOT-analyse",
+  "Help me een verdienmodel kiezen",
 ];
 
 function CopyButton({ text }: { text: string }) {
@@ -58,11 +59,8 @@ function MessageBubble({
     );
   }
   return (
-    <div className="group flex gap-3">
-      <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10 text-xs font-bold text-emerald-700 dark:text-emerald-300">
-        AI
-      </div>
-      <div className="min-w-0 max-w-[85%]">
+    <div className="group">
+      <div className="min-w-0 max-w-[92%]">
         <div className="markdown text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">
           {message.content ? (
             <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{message.content}</ReactMarkdown>
@@ -222,98 +220,108 @@ function ChatView() {
   }, [initialQuestion, chatId]);
 
   const empty = messages.length === 0;
+  const greeting = useGreeting();
+
+  const composer = (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        send(input);
+      }}
+      className="w-full"
+    >
+      {error && (
+        <p className="mb-3 rounded-xl border border-red-600/30 dark:border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-700 dark:text-red-300">
+          {error}
+        </p>
+      )}
+      <div
+        className={`flex items-end gap-2 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] focus-within:border-emerald-400/50 ${
+          empty ? "p-2.5" : "p-2"
+        }`}
+      >
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send(input);
+            }
+          }}
+          placeholder={empty ? "Hoe kan ik je vandaag helpen?" : "Stel een vraag…"}
+          rows={Math.min(6, Math.max(1, input.split("\n").length))}
+          autoFocus
+          className="max-h-40 w-full resize-none bg-transparent px-3 py-2 text-[15px] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
+        />
+        {busy ? (
+          <button
+            type="button"
+            onClick={stop}
+            aria-label="Stop met genereren"
+            className="shrink-0 rounded-xl border border-slate-900/15 dark:border-white/15 px-4 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300 transition hover:border-red-400/50 hover:text-red-600 dark:hover:text-red-400"
+          >
+            ◼
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={input.trim().length === 0}
+            aria-label="Verstuur"
+            className="shrink-0 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ↑
+          </button>
+        )}
+      </div>
+    </form>
+  );
+
+  if (empty) {
+    return (
+      <div className="mx-auto flex h-full w-full max-w-2xl flex-col items-center justify-center px-6 pb-24">
+        <h1
+          key={greeting}
+          className="animate-fade-up min-h-[44px] text-center font-[family-name:var(--font-display)] text-3xl font-semibold text-slate-900 dark:text-white sm:text-4xl"
+        >
+          {greeting}
+        </h1>
+        <div className="mt-8 w-full">{composer}</div>
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              onClick={() => send(s)}
+              className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-emerald-400/40 hover:text-slate-800 dark:hover:text-slate-200"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto">
-        {empty ? (
-          <div className="animate-fade-up mx-auto flex h-full max-w-2xl flex-col items-center justify-center px-6 text-center">
-            <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-slate-900 dark:text-white sm:text-4xl">
-              Waarmee kan ik je <span className="text-emerald-600 dark:text-emerald-400">helpen</span>?
-            </h1>
-            <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-              Elke chat wordt automatisch opgeslagen en is via de sidebar te
-              exporteren als trainingsdata voor je eigen model.
-            </p>
-            <div className="mt-8 grid w-full gap-2.5 sm:grid-cols-2">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => send(s)}
-                  className="rounded-xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 text-left text-sm text-slate-700 dark:text-slate-300 transition hover:border-emerald-400/40 hover:text-slate-900 dark:hover:text-white"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6">
-            {messages.map((m, i) => (
-              <MessageBubble
-                key={i}
-                message={m}
-                isLast={i === messages.length - 1}
-                busy={busy}
-                onRegenerate={() => send("", { regenerate: true })}
-              />
-            ))}
-            <div ref={bottomRef} />
-          </div>
-        )}
+        <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6">
+          {messages.map((m, i) => (
+            <MessageBubble
+              key={i}
+              message={m}
+              isLast={i === messages.length - 1}
+              busy={busy}
+              onRegenerate={() => send("", { regenerate: true })}
+            />
+          ))}
+          <div ref={bottomRef} />
+        </div>
       </div>
 
-      <div className="border-t border-slate-900/10 dark:border-white/10 bg-slate-50/80 dark:bg-black/20 px-4 py-4 sm:px-6">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            send(input);
-          }}
-          className="mx-auto max-w-3xl"
-        >
-          {error && (
-            <p className="mb-3 rounded-xl border border-red-600/30 dark:border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-700 dark:text-red-300">
-              {error}
-            </p>
-          )}
-          <div className="flex items-end gap-3 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] p-2 focus-within:border-emerald-400/50">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send(input);
-                }
-              }}
-              placeholder="Stel een vraag… (Enter om te versturen)"
-              rows={Math.min(6, Math.max(1, input.split("\n").length))}
-              autoFocus
-              className="max-h-40 w-full resize-none bg-transparent px-3 py-2 text-[15px] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
-            />
-            {busy ? (
-              <button
-                type="button"
-                onClick={stop}
-                className="shrink-0 rounded-xl border border-slate-900/15 dark:border-white/15 bg-slate-900/5 dark:bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 transition hover:border-red-400/50 hover:text-red-600 dark:hover:text-red-400"
-              >
-                ◼ Stop
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={input.trim().length === 0}
-                className="shrink-0 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Verstuur
-              </button>
-            )}
-          </div>
-          <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-600">
-            Chats worden lokaal opgeslagen in <code>data/chats/</code> en zijn exporteerbaar als JSONL-trainingsdata
-          </p>
-        </form>
+      <div className="px-4 pb-4 sm:px-6">
+        <div className="mx-auto max-w-3xl">{composer}</div>
       </div>
     </div>
   );
