@@ -348,6 +348,51 @@ function SettingsView() {
             ✓ {deleteMessage}
           </p>
         )}
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-900/10 pt-4 dark:border-white/10">
+          <a
+            href="/api/backup"
+            className="rounded-xl border border-slate-900/15 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-accent-400/50 dark:border-white/15 dark:text-slate-300"
+          >
+            ⇩ Volledige back-up (JSON)
+          </a>
+          <label className="cursor-pointer rounded-xl border border-slate-900/15 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-accent-400/50 dark:border-white/15 dark:text-slate-300">
+            ⇧ Importeer back-up…
+            <input
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                try {
+                  const res = await fetch("/api/backup", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: await file.text(),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error);
+                  const c = data.imported;
+                  setDeleteMessage(
+                    `Geïmporteerd: ${c.chats} chats, ${c.reports} rapporten, ${c.notes} notities, ${c.prompts} sjablonen.`
+                  );
+                  window.dispatchEvent(new Event(CHATS_UPDATED_EVENT));
+                  const chatsRes = await fetch("/api/chats");
+                  setChatCount((await chatsRes.json()).chats?.length ?? 0);
+                } catch (err) {
+                  setDeleteMessage(
+                    err instanceof Error ? err.message : "Import mislukt"
+                  );
+                }
+                setTimeout(() => setDeleteMessage(""), 6000);
+              }}
+            />
+          </label>
+          <span className="text-xs text-slate-500">
+            Back-up bevat chats, rapporten, notities, sjablonen en instellingen
+          </span>
+        </div>
       </Section>
     </main>
   );
