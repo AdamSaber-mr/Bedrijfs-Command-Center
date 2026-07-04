@@ -13,6 +13,9 @@ export interface Chat {
   createdAt: string;
   updatedAt: string;
   messages: ChatMessage[];
+  // Optionele achtergrondcontext (bv. een deal-rapport) die als systeemcontext
+  // wordt meegestuurd, maar geen deel is van de zichtbare berichten.
+  context?: string;
 }
 
 export interface ChatSummary {
