@@ -52,12 +52,15 @@ const ICONS = {
   chevronRight: "M9 6l6 6-6 6",
   sun: "M12 17a5 5 0 100-10 5 5 0 000 10zM12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4",
   moon: "M21 13A8.5 8.5 0 0111 3a8.5 8.5 0 102 10z",
+  monitor: "M4 5h16v11H4zM9 20h6M12 16v4",
+  pin: "M9 3h6l-1 6 3.5 3v1h-11v-1L10 9 9 3zM12 13v8",
+  pencil: "M4 20l1.2-4L16.5 4.7a2.1 2.1 0 013 3L8.2 19 4 20z",
 };
 
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent-400 to-accent-600">
         <svg viewBox="0 0 24 24" fill="white" className="h-4.5 w-4.5" aria-hidden>
           <path d="M13 2 4.5 13.5h5L11 22l8.5-11.5h-5L13 2z" />
         </svg>
@@ -65,7 +68,7 @@ function Logo({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <span className="font-[family-name:var(--font-display)] text-sm font-bold leading-tight tracking-wide text-slate-900 dark:text-white">
           Bedrijfs
-          <span className="block text-emerald-600 dark:text-emerald-400">Command Center</span>
+          <span className="block text-accent-600 dark:text-accent-400">Command Center</span>
         </span>
       )}
     </span>
@@ -95,52 +98,60 @@ function currentTheme(): "dark" | "light" {
     : "light";
 }
 
-function applyTheme(next: "dark" | "light") {
-  document.documentElement.classList.toggle("dark", next === "dark");
+// Thema kent drie standen: licht, donker of systeem (volgt het OS).
+// De keuze leeft in localStorage; "systeem" = geen opgeslagen waarde.
+type ThemeMode = "light" | "dark" | "system";
+const THEME_MODE_EVENT = "theme-mode-changed";
+
+function subscribeThemeMode(onChange: () => void) {
+  window.addEventListener(THEME_MODE_EVENT, onChange);
+  return () => window.removeEventListener(THEME_MODE_EVENT, onChange);
+}
+
+function getThemeMode(): ThemeMode {
   try {
-    localStorage.setItem("theme", next);
+    const stored = localStorage.getItem("theme");
+    return stored === "light" || stored === "dark" ? stored : "system";
+  } catch {
+    return "system";
+  }
+}
+
+function systemPrefersDark() {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function applyThemeMode(mode: ThemeMode) {
+  try {
+    if (mode === "system") localStorage.removeItem("theme");
+    else localStorage.setItem("theme", mode);
   } catch {
     // privémodus zonder localStorage — thema geldt dan alleen deze sessie
   }
-}
-
-// De class op <html> is de bron van waarheid (gezet door het no-flash script
-// in layout.tsx); een MutationObserver houdt React ermee in sync.
-function subscribeTheme(onChange: () => void) {
-  const observer = new MutationObserver(onChange);
-  observer.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ["class"],
-  });
-  return () => observer.disconnect();
-}
-
-function useTheme(): "dark" | "light" {
-  return useSyncExternalStore(subscribeTheme, currentTheme, () => "dark");
+  const dark = mode === "dark" || (mode === "system" && systemPrefersDark());
+  document.documentElement.classList.toggle("dark", dark);
+  window.dispatchEvent(new Event(THEME_MODE_EVENT));
 }
 
 function ThemeToggle() {
-  const theme = useTheme();
-
-  function apply(next: "dark" | "light") {
-    applyTheme(next);
-  }
+  const mode = useSyncExternalStore(subscribeThemeMode, getThemeMode, () => "system");
 
   return (
     <div className="flex rounded-lg border border-slate-900/10 p-0.5 dark:border-white/10">
       {(
         [
           { value: "light", label: "Licht", icon: ICONS.sun },
+          { value: "system", label: "Auto", icon: ICONS.monitor },
           { value: "dark", label: "Donker", icon: ICONS.moon },
         ] as const
       ).map((option) => (
         <button
           key={option.value}
-          onClick={() => apply(option.value)}
-          aria-pressed={theme === option.value}
+          onClick={() => applyThemeMode(option.value)}
+          aria-pressed={mode === option.value}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition ${
-            theme === option.value
-              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+            mode === option.value
+              ? "bg-accent-500/15 text-accent-700 dark:text-accent-300"
               : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
           }`}
         >
@@ -163,6 +174,13 @@ interface PaletteItem {
   run: () => void;
 }
 
+interface SearchHits {
+  chats: { id: string; title: string; snippet: string }[];
+  reports: { id: string; company: string; snippet: string }[];
+}
+
+const NO_HITS: SearchHits = { chats: [], reports: [] };
+
 function CommandPalette({
   onClose,
   chats,
@@ -175,7 +193,23 @@ function CommandPalette({
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
+  const [hits, setHits] = useState<SearchHits>(NO_HITS);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Full-text zoeken in de inhoud van chats en rapporten, licht gedebounced.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        if (res.ok) setHits(await res.json());
+      } catch {
+        // zoeken mag stil falen
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const items = useMemo<PaletteItem[]>(() => {
     const go = (href: string) => () => {
@@ -193,7 +227,7 @@ function CommandPalette({
         label: "Thema wisselen",
         icon: currentTheme() === "dark" ? ICONS.sun : ICONS.moon,
         run: () => {
-          applyTheme(currentTheme() === "dark" ? "light" : "dark");
+          applyThemeMode(currentTheme() === "dark" ? "light" : "dark");
           onClose();
         },
       },
@@ -229,8 +263,37 @@ function CommandPalette({
     const all = [...actions, ...chatItems, ...reportItems];
     const q = query.trim().toLowerCase();
     if (!q) return [...actions, ...chatItems.slice(0, 5), ...reportItems.slice(0, 4)];
-    return all.filter((item) => item.label.toLowerCase().includes(q)).slice(0, 12);
-  }, [query, chats, reports, router, onClose]);
+
+    const byTitle = all.filter((item) => item.label.toLowerCase().includes(q)).slice(0, 10);
+    const shown = new Set(byTitle.map((item) => item.id));
+
+    // Full-text-treffers uit berichten en rapportinhoud, zonder dubbelingen
+    // met resultaten die al op titel matchen.
+    const contentItems: PaletteItem[] = [
+      ...hits.chats
+        .filter((hit) => !shown.has(`chat-${hit.id}`))
+        .map((hit) => ({
+          id: `chat-content-${hit.id}`,
+          group: "In berichten",
+          label: hit.title,
+          hint: hit.snippet,
+          icon: ICONS.chat,
+          run: go(`/chat?chat=${hit.id}`),
+        })),
+      ...hits.reports
+        .filter((hit) => !shown.has(`report-${hit.id}`))
+        .map((hit) => ({
+          id: `report-content-${hit.id}`,
+          group: "In rapporten",
+          label: hit.company,
+          hint: hit.snippet,
+          icon: ICONS.report,
+          run: go(`/research?report=${hit.id}`),
+        })),
+    ];
+
+    return [...byTitle, ...contentItems].slice(0, 14);
+  }, [query, chats, reports, hits, router, onClose]);
 
   // Houd de selectie in beeld bij navigatie met pijltjestoetsen.
   useEffect(() => {
@@ -264,6 +327,7 @@ function CommandPalette({
             onChange={(e) => {
               setQuery(e.target.value);
               setIndex(0);
+              if (e.target.value.trim().length < 2) setHits(NO_HITS);
             }}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
@@ -305,14 +369,14 @@ function CommandPalette({
                   onMouseMove={() => setIndex(flatIndex)}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition ${
                     flatIndex === index
-                      ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+                      ? "bg-accent-500/10 text-accent-800 dark:text-accent-200"
                       : "text-slate-700 dark:text-slate-300"
                   }`}
                 >
                   <Icon d={item.icon} className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   {item.hint && (
-                    <span className="shrink-0 text-xs text-slate-400 dark:text-slate-600">
+                    <span className="max-w-[45%] shrink-0 truncate text-xs text-slate-400 dark:text-slate-600">
                       {item.hint}
                     </span>
                   )}
@@ -390,12 +454,51 @@ function Sidebar({
   const searchParams = useSearchParams();
   const activeChatId = searchParams.get("chat");
   const activeReportId = searchParams.get("report");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const skipCommitRef = useRef(false);
 
   async function removeChat(id: string, e: React.MouseEvent) {
     e.stopPropagation();
     e.preventDefault();
     await fetch(`/api/chats/${id}`, { method: "DELETE" });
     if (activeChatId === id) router.push("/chat");
+    refreshChats();
+  }
+
+  async function togglePin(chat: ChatSummary, e: React.MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    await fetch(`/api/chats/${chat.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned: !chat.pinned }),
+    });
+    refreshChats();
+  }
+
+  function startRename(chat: ChatSummary, e: React.MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    skipCommitRef.current = false;
+    setDraft(chat.title);
+    setRenamingId(chat.id);
+  }
+
+  // Opslaan gebeurt via één pad (blur); Enter blurt, Escape annuleert.
+  async function commitRename(id: string) {
+    if (skipCommitRef.current) {
+      skipCommitRef.current = false;
+      return;
+    }
+    const title = draft.trim();
+    setRenamingId(null);
+    if (!title) return;
+    await fetch(`/api/chats/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
     refreshChats();
   }
 
@@ -407,14 +510,88 @@ function Sidebar({
     refreshReports();
   }
 
-  // Groepeer op dag voor het bekende sidebar-gevoel
+  // Vastgepinde chats bovenaan; de rest gegroepeerd op dag
+  const pinnedChats = chats.filter((c) => c.pinned);
   const groups: { label: string; items: ChatSummary[] }[] = [];
   for (const chat of chats) {
+    if (chat.pinned) continue;
     const label = relativeDay(chat.updatedAt);
     const group = groups.find((g) => g.label === label);
     if (group) group.items.push(chat);
     else groups.push({ label, items: [chat] });
   }
+
+  const renderChat = (chat: ChatSummary) => {
+    if (renamingId === chat.id) {
+      return (
+        <div key={chat.id} className="px-1 py-0.5">
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (e.key === "Escape") {
+                skipCommitRef.current = true;
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            onBlur={() => commitRename(chat.id)}
+            className="w-full rounded-lg border border-accent-400/50 bg-transparent px-2.5 py-1.5 text-sm text-slate-900 focus:outline-none dark:text-white"
+          />
+        </div>
+      );
+    }
+    return (
+      <button
+        key={chat.id}
+        onClick={() => {
+          router.push(`/chat?chat=${chat.id}`);
+          onNavigate?.();
+        }}
+        className={`group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
+          activeChatId === chat.id && pathname === "/chat"
+            ? "bg-slate-900/10 text-slate-900 dark:bg-white/10 dark:text-white"
+            : "text-slate-600 hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
+        }`}
+      >
+        <span className="min-w-0 flex-1 truncate">{chat.title}</span>
+        <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+          <span
+            role="button"
+            aria-label={chat.pinned ? "Losmaken" : "Vastpinnen"}
+            title={chat.pinned ? "Losmaken" : "Vastpinnen"}
+            onClick={(e) => togglePin(chat, e)}
+            className={`rounded p-0.5 ${
+              chat.pinned
+                ? "text-accent-600 dark:text-accent-400"
+                : "text-slate-500 hover:text-accent-600 dark:hover:text-accent-300"
+            }`}
+          >
+            <Icon d={ICONS.pin} className="h-3.5 w-3.5" />
+          </span>
+          <span
+            role="button"
+            aria-label="Hernoem chat"
+            title="Hernoemen"
+            onClick={(e) => startRename(chat, e)}
+            className="rounded p-0.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+          >
+            <Icon d={ICONS.pencil} className="h-3.5 w-3.5" />
+          </span>
+          <span
+            role="button"
+            aria-label="Verwijder chat"
+            title="Verwijderen"
+            onClick={(e) => removeChat(chat.id, e)}
+            className="rounded p-0.5 text-slate-500 hover:text-red-500 dark:hover:text-red-400"
+          >
+            <Icon d={ICONS.close} className="h-3.5 w-3.5" />
+          </span>
+        </span>
+      </button>
+    );
+  };
 
   return (
     <aside
@@ -455,7 +632,7 @@ function Sidebar({
             onNavigate?.();
           }}
           title={collapsed ? "Nieuwe chat" : undefined}
-          className={`flex w-full items-center gap-2.5 rounded-lg border border-emerald-600/30 bg-emerald-500/10 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/20 dark:border-emerald-500/30 dark:text-emerald-300 ${
+          className={`flex w-full items-center gap-2.5 rounded-lg border border-accent-600/30 bg-accent-500/10 py-2 text-sm font-medium text-accent-700 transition hover:bg-accent-500/20 dark:border-accent-500/30 dark:text-accent-300 ${
             collapsed ? "justify-center px-0" : "px-3"
           }`}
         >
@@ -485,7 +662,7 @@ function Sidebar({
           <div className="px-3 pb-1">
             <button
               onClick={onOpenPalette}
-              className="flex w-full items-center gap-2.5 rounded-lg border border-slate-900/10 px-3 py-2 text-sm text-slate-400 transition hover:border-emerald-400/40 hover:text-slate-600 dark:border-white/10 dark:text-slate-500 dark:hover:text-slate-300"
+              className="flex w-full items-center gap-2.5 rounded-lg border border-slate-900/10 px-3 py-2 text-sm text-slate-400 transition hover:border-accent-400/40 hover:text-slate-600 dark:border-white/10 dark:text-slate-500 dark:hover:text-slate-300"
             >
               <Icon d={ICONS.search} className="h-4 w-4" />
               <span className="flex-1 text-left">Zoeken…</span>
@@ -531,41 +708,26 @@ function Sidebar({
             )}
 
             {/* Chats */}
-            {groups.length === 0 && (
+            {chats.length === 0 && (
               <p className="px-3 py-6 text-xs text-slate-400 dark:text-slate-600">
                 Nog geen chats. Start hierboven een nieuwe chat — elk gesprek wordt
                 automatisch opgeslagen als trainingsdata.
               </p>
+            )}
+            {pinnedChats.length > 0 && (
+              <div className="mb-4">
+                <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-600">
+                  Vastgepind
+                </p>
+                {pinnedChats.map(renderChat)}
+              </div>
             )}
             {groups.map((group) => (
               <div key={group.label} className="mb-4">
                 <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-600">
                   {group.label}
                 </p>
-                {group.items.map((chat) => (
-                  <button
-                    key={chat.id}
-                    onClick={() => {
-                      router.push(`/chat?chat=${chat.id}`);
-                      onNavigate?.();
-                    }}
-                    className={`group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
-                      activeChatId === chat.id && pathname === "/chat"
-                        ? "bg-slate-900/10 text-slate-900 dark:bg-white/10 dark:text-white"
-                        : "text-slate-600 hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{chat.title}</span>
-                    <span
-                      role="button"
-                      aria-label="Verwijder chat"
-                      onClick={(e) => removeChat(chat.id, e)}
-                      className="hidden shrink-0 rounded p-0.5 text-slate-500 hover:text-red-500 group-hover:block dark:hover:text-red-400"
-                    >
-                      <Icon d={ICONS.close} className="h-3.5 w-3.5" />
-                    </span>
-                  </button>
-                ))}
+                {group.items.map(renderChat)}
               </div>
             ))}
           </nav>
@@ -574,7 +736,7 @@ function Sidebar({
             <ThemeToggle />
             <a
               href="/api/export"
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-slate-600 transition hover:bg-slate-900/5 hover:text-emerald-700 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-emerald-300"
+              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-slate-600 transition hover:bg-slate-900/5 hover:text-accent-700 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-accent-300"
             >
               <Icon d={ICONS.download} className="h-4 w-4" />
               <span>
@@ -616,6 +778,54 @@ function Sidebar({
         </div>
       )}
     </aside>
+  );
+}
+
+/* ---------- Shortcuts-overzicht (?) ---------- */
+
+const SHORTCUTS: { keys: string[]; label: string }[] = [
+  { keys: ["⌘", "K"], label: "Zoeken in chats, rapporten en acties" },
+  { keys: ["⌘", "B"], label: "Sidebar in- of uitklappen" },
+  { keys: ["⌘", "⇧", "O"], label: "Nieuwe chat" },
+  { keys: ["Enter"], label: "Bericht versturen" },
+  { keys: ["⇧", "Enter"], label: "Nieuwe regel in een bericht" },
+  { keys: ["?"], label: "Dit overzicht openen of sluiten" },
+  { keys: ["Esc"], label: "Venster sluiten" },
+];
+
+function ShortcutsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm dark:bg-black/60"
+      onClick={onClose}
+    >
+      <div
+        className="animate-fade-up w-full max-w-sm rounded-2xl border border-slate-900/10 bg-white p-6 shadow-2xl shadow-slate-900/20 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/60"
+        style={{ animationDuration: "0.2s" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Sneltoetsen
+        </h2>
+        <ul className="mt-4 space-y-2.5">
+          {SHORTCUTS.map((s) => (
+            <li key={s.label} className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-slate-600 dark:text-slate-400">{s.label}</span>
+              <span className="flex shrink-0 gap-1">
+                {s.keys.map((k) => (
+                  <kbd
+                    key={k}
+                    className="rounded border border-slate-900/15 px-1.5 py-0.5 text-[11px] text-slate-500 dark:border-white/15 dark:text-slate-400"
+                  >
+                    {k}
+                  </kbd>
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
@@ -673,8 +883,10 @@ function getCollapsed() {
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [resizing, setResizing] = useState(false);
   const collapsed = useSyncExternalStore(subscribeCollapsed, getCollapsed, () => false);
   const sidebarWidth = useSyncExternalStore(
@@ -737,23 +949,58 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   function toggleCollapse() {
     try {
-      localStorage.setItem("sidebar-collapsed", collapsed ? "0" : "1");
+      // Lees de actuele stand uit localStorage zodat dit ook vanuit
+      // stale closures (zoals de globale keydown-listener) klopt.
+      localStorage.setItem("sidebar-collapsed", getCollapsed() ? "0" : "1");
     } catch {
       // geen localStorage — inklappen werkt dan niet, geen ramp
     }
     window.dispatchEvent(new Event(SIDEBAR_EVENT));
   }
 
-  // ⌘K / Ctrl+K opent het zoekpalet.
+  // Globale sneltoetsen: ⌘K zoeken, ⌘B sidebar, ⌘⇧O nieuwe chat, ? overzicht.
   useEffect(() => {
+    function isEditable(target: EventTarget | null) {
+      return (
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      );
+    }
     function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        setShortcutsOpen(false);
         setPaletteOpen((o) => !o);
+      } else if (mod && !e.shiftKey && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleCollapse();
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        router.push("/chat");
+      } else if (e.key === "?" && !mod && !e.altKey && !isEditable(e.target)) {
+        e.preventDefault();
+        setShortcutsOpen((o) => !o);
+      } else if (e.key === "Escape") {
+        setShortcutsOpen(false);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, [router]);
+
+  // Volg live wijzigingen van het OS-thema wanneer "Auto" actief is.
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => {
+      if (getThemeMode() === "system") {
+        document.documentElement.classList.toggle("dark", mq.matches);
+      }
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   return (
@@ -778,7 +1025,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             title="Sleep om de breedte aan te passen · dubbelklik om te herstellen"
             aria-hidden
             className={`absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize transition-colors ${
-              resizing ? "bg-emerald-400/50" : "hover:bg-emerald-400/30"
+              resizing ? "bg-accent-400/50" : "hover:bg-accent-400/30"
             }`}
           />
         )}
@@ -831,6 +1078,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           reports={reports}
         />
       )}
+      {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
     </div>
   );
 }
