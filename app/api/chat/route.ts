@@ -58,9 +58,9 @@ async function generateTitle(client: Anthropic, userMessage: string, answer: str
 }
 
 export async function POST(request: Request) {
-  let chatId: unknown, message: unknown, regenerate: unknown;
+  let chatId: unknown, message: unknown, regenerate: unknown, replaceFrom: unknown;
   try {
-    ({ chatId, message, regenerate } = await request.json());
+    ({ chatId, message, regenerate, replaceFrom } = await request.json());
   } catch {
     return Response.json({ error: "Ongeldige aanvraag" }, { status: 400 });
   }
@@ -86,6 +86,16 @@ export async function POST(request: Request) {
     chat =
       (typeof chatId === "string" && (await getChat(chatId))) ||
       newChat(userMessage);
+    // Bewerken van een eerder bericht: kap het gesprek af vóór dat bericht,
+    // zodat de aangepaste versie en een nieuw antwoord de rest vervangen.
+    if (
+      typeof replaceFrom === "number" &&
+      Number.isInteger(replaceFrom) &&
+      replaceFrom >= 0 &&
+      replaceFrom < chat.messages.length
+    ) {
+      chat.messages = chat.messages.slice(0, replaceFrom);
+    }
     chat.messages.push({
       role: "user",
       content: userMessage,

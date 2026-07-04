@@ -6,8 +6,142 @@ import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import AppShell, { CHATS_UPDATED_EVENT } from "@/components/AppShell";
 import type { ChatMessage } from "@/lib/chatStore";
+import type { PromptTemplate } from "@/lib/promptStore";
 import { useGreeting } from "@/lib/greeting";
 import { useTypewriter } from "@/lib/animation";
+
+function TemplatesButton({
+  currentInput,
+  onInsert,
+}: {
+  currentInput: string;
+  onInsert: (text: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [prompts, setPrompts] = useState<PromptTemplate[] | null>(null);
+  const [newTitle, setNewTitle] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const res = await fetch("/api/prompts");
+      const data = await res.json();
+      setPrompts(data.prompts ?? []);
+    } catch {
+      setPrompts([]);
+    }
+  }
+
+  function toggle() {
+    setOpen((o) => !o);
+    setNewTitle(null);
+    if (!prompts) load();
+  }
+
+  async function saveCurrent() {
+    if (!newTitle?.trim() || !currentInput.trim()) return;
+    await fetch("/api/prompts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: newTitle, text: currentInput }),
+    });
+    setNewTitle(null);
+    load();
+  }
+
+  return (
+    <div className="relative">
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="animate-scale-in absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-xl border border-slate-900/10 bg-white shadow-xl shadow-slate-900/10 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/50">
+            <p className="border-b border-slate-900/10 px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:border-white/10 dark:text-slate-500">
+              Prompt-sjablonen
+            </p>
+            <div className="max-h-56 overflow-y-auto p-1.5">
+              {prompts === null && (
+                <p className="px-2.5 py-3 text-xs text-slate-400">Laden…</p>
+              )}
+              {prompts !== null && prompts.length === 0 && (
+                <p className="px-2.5 py-3 text-xs text-slate-400 dark:text-slate-500">
+                  Nog geen sjablonen. Typ iets in het invoerveld en sla het hieronder op.
+                </p>
+              )}
+              {(prompts ?? []).map((p) => (
+                <div key={p.id} className="group flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      onInsert(p.text);
+                      setOpen(false);
+                    }}
+                    className="min-w-0 flex-1 rounded-lg px-2.5 py-2 text-left text-sm text-slate-700 transition hover:bg-accent-500/10 dark:text-slate-300"
+                  >
+                    <span className="block truncate font-medium">{p.title}</span>
+                    <span className="block truncate text-xs text-slate-400 dark:text-slate-500">
+                      {p.text}
+                    </span>
+                  </button>
+                  <button
+                    aria-label="Verwijder sjabloon"
+                    onClick={async () => {
+                      await fetch(`/api/prompts/${p.id}`, { method: "DELETE" });
+                      load();
+                    }}
+                    className="hidden shrink-0 rounded p-1 text-slate-400 hover:text-red-500 group-hover:block dark:hover:text-red-400"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+            {currentInput.trim().length > 0 && (
+              <div className="border-t border-slate-900/10 p-2 dark:border-white/10">
+                {newTitle === null ? (
+                  <button
+                    onClick={() => setNewTitle("")}
+                    className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-accent-700 transition hover:bg-accent-500/10 dark:text-accent-300"
+                  >
+                    ＋ Huidige invoer opslaan als sjabloon
+                  </button>
+                ) : (
+                  <div className="flex gap-1.5">
+                    <input
+                      autoFocus
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && saveCurrent()}
+                      placeholder="Naam van het sjabloon…"
+                      className="w-full rounded-lg border border-slate-900/15 bg-transparent px-2.5 py-1.5 text-xs text-slate-900 focus:border-accent-400/50 focus:outline-none dark:border-white/15 dark:text-white"
+                    />
+                    <button
+                      onClick={saveCurrent}
+                      disabled={!newTitle.trim()}
+                      className="shrink-0 rounded-lg bg-accent-500 px-2.5 py-1.5 text-xs font-semibold text-accent-950 transition hover:bg-accent-400 disabled:opacity-40"
+                    >
+                      Opslaan
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+      <button
+        type="button"
+        onClick={toggle}
+        title="Prompt-sjablonen"
+        aria-label="Prompt-sjablonen"
+        className={`shrink-0 rounded-xl border px-3 py-2.5 text-sm transition active:scale-95 ${
+          open
+            ? "border-accent-400/50 text-accent-700 dark:text-accent-300"
+            : "border-slate-900/15 text-slate-500 hover:border-accent-400/40 hover:text-slate-800 dark:border-white/15 dark:text-slate-400 dark:hover:text-slate-200"
+        }`}
+      >
+        ✦
+      </button>
+    </div>
+  );
+}
 
 const SUGGESTIONS = [
   "Schrijf een professionele e-mail",
@@ -44,15 +178,17 @@ function MessageBubble({
   isLast,
   busy,
   onRegenerate,
+  onEdit,
 }: {
   message: ChatMessage;
   isLast: boolean;
   busy: boolean;
   onRegenerate: () => void;
+  onEdit: () => void;
 }) {
   if (message.role === "user") {
     return (
-      <div className="animate-message-in flex justify-end">
+      <div className="animate-message-in group flex flex-col items-end">
         <div
           title={
             message.at
@@ -66,6 +202,14 @@ function MessageBubble({
         >
           <p className="whitespace-pre-wrap">{message.content}</p>
         </div>
+        {!busy && (
+          <button
+            onClick={onEdit}
+            className="mt-1 rounded-md px-2 py-1 text-xs text-slate-400 opacity-0 transition hover:bg-slate-900/5 hover:text-slate-700 group-hover:opacity-100 dark:text-slate-500 dark:hover:bg-white/5 dark:hover:text-slate-300"
+          >
+            ✎ Bewerk
+          </button>
+        )}
       </div>
     );
   }
@@ -123,11 +267,15 @@ function ChatView() {
   const searchParams = useSearchParams();
   const chatId = searchParams.get("chat");
   const initialQuestion = searchParams.get("q");
+  const draft = searchParams.get("draft");
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState<{ index: number; text: string } | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -157,21 +305,25 @@ function ChatView() {
     };
   }, [chatId]);
 
+  // Alleen automatisch meescrollen als de gebruiker (bijna) onderaan staat.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (atBottom) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
 
-  async function send(text: string, opts?: { regenerate?: boolean }) {
+  async function send(text: string, opts?: { regenerate?: boolean; replaceFrom?: number }) {
     const trimmed = text.trim();
     if ((!trimmed && !opts?.regenerate) || busy) return;
     setBusy(true);
     setError("");
     setInput("");
-    setMessages((prev) =>
-      opts?.regenerate
-        ? [...prev.slice(0, -1), { role: "assistant", content: "" }]
-        : [...prev, { role: "user", content: trimmed }, { role: "assistant", content: "" }]
-    );
+    setEditing(null);
+    setAtBottom(true);
+    setMessages((prev) => {
+      if (opts?.regenerate) return [...prev.slice(0, -1), { role: "assistant", content: "" }];
+      const base = opts?.replaceFrom !== undefined ? prev.slice(0, opts.replaceFrom) : prev;
+      return [...base, { role: "user", content: trimmed }, { role: "assistant", content: "" }];
+    });
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -181,7 +333,9 @@ function ChatView() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          opts?.regenerate ? { chatId, regenerate: true } : { chatId, message: trimmed }
+          opts?.regenerate
+            ? { chatId, regenerate: true }
+            : { chatId, message: trimmed, replaceFrom: opts?.replaceFrom }
         ),
         signal: controller.signal,
       });
@@ -243,6 +397,18 @@ function ChatView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuestion, chatId]);
 
+  // Sjabloon meegekregen via ⌘K (?draft=…): zet het klaar in het invoerveld.
+  function applyDraft(text: string) {
+    setInput(text);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+  useEffect(() => {
+    if (draft && !autoSentRef.current) {
+      autoSentRef.current = true;
+      applyDraft(draft);
+    }
+  }, [draft]);
+
   const empty = messages.length === 0;
   const { greeting, tagline } = useGreeting();
   const typed = useTypewriter(greeting);
@@ -279,6 +445,13 @@ function ChatView() {
           rows={Math.min(6, Math.max(1, input.split("\n").length))}
           autoFocus
           className="max-h-40 w-full resize-none bg-transparent px-3 py-2 text-[15px] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
+        />
+        <TemplatesButton
+          currentInput={input}
+          onInsert={(text) => {
+            setInput(text);
+            setTimeout(() => inputRef.current?.focus(), 0);
+          }}
         />
         {busy ? (
           <button
@@ -340,19 +513,89 @@ function ChatView() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6">
-          {messages.map((m, i) => (
-            <MessageBubble
-              key={i}
-              message={m}
-              isLast={i === messages.length - 1}
-              busy={busy}
-              onRegenerate={() => send("", { regenerate: true })}
-            />
-          ))}
-          <div ref={bottomRef} />
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          onScroll={() => {
+            const el = scrollRef.current;
+            if (!el) return;
+            setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
+          }}
+          className="h-full overflow-y-auto"
+        >
+          <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6">
+            {chatId && (
+              <div className="flex justify-end">
+                <a
+                  href={`/api/chats/${chatId}/markdown`}
+                  className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/5 dark:hover:text-slate-300"
+                >
+                  ⇩ Exporteer als Markdown
+                </a>
+              </div>
+            )}
+            {messages.map((m, i) =>
+              editing?.index === i ? (
+                <div key={i} className="animate-message-in flex justify-end">
+                  <div className="w-full max-w-[85%] rounded-2xl border border-accent-400/50 bg-white p-2 dark:bg-white/[0.04]">
+                    <textarea
+                      autoFocus
+                      value={editing.text}
+                      onChange={(e) => setEditing({ index: i, text: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          send(editing.text, { replaceFrom: i });
+                        }
+                        if (e.key === "Escape") setEditing(null);
+                      }}
+                      rows={Math.min(8, Math.max(2, editing.text.split("\n").length))}
+                      className="w-full resize-none bg-transparent px-2 py-1.5 text-[15px] text-slate-900 focus:outline-none dark:text-white"
+                    />
+                    <div className="flex justify-end gap-2 px-1 pb-1">
+                      <button
+                        onClick={() => setEditing(null)}
+                        className="rounded-lg px-3 py-1.5 text-xs text-slate-500 transition hover:text-slate-800 dark:hover:text-slate-200"
+                      >
+                        Annuleer
+                      </button>
+                      <button
+                        onClick={() => send(editing.text, { replaceFrom: i })}
+                        disabled={editing.text.trim().length === 0}
+                        className="rounded-lg bg-accent-500 px-3 py-1.5 text-xs font-semibold text-accent-950 transition hover:bg-accent-400 active:scale-95 disabled:opacity-40"
+                      >
+                        Opslaan & opnieuw
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <MessageBubble
+                  key={i}
+                  message={m}
+                  isLast={i === messages.length - 1}
+                  busy={busy}
+                  onRegenerate={() => send("", { regenerate: true })}
+                  onEdit={() => setEditing({ index: i, text: m.content })}
+                />
+              )
+            )}
+            <div ref={bottomRef} />
+          </div>
         </div>
+
+        {!atBottom && (
+          <button
+            onClick={() => {
+              setAtBottom(true);
+              bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            }}
+            aria-label="Scroll naar beneden"
+            className="animate-fade-in absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-slate-900/15 bg-white px-3 py-1.5 text-xs text-slate-600 shadow-lg shadow-slate-900/10 transition hover:border-accent-400/50 hover:text-slate-900 active:scale-95 dark:border-white/15 dark:bg-[#0d1526] dark:text-slate-300 dark:shadow-black/40 dark:hover:text-white"
+          >
+            ↓ Nieuwste bericht
+          </button>
+        )}
       </div>
 
       <div className="px-4 pb-4 sm:px-6">
