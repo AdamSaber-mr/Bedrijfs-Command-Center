@@ -4,10 +4,38 @@ import { getSettings } from "@/lib/settings";
 
 export const maxDuration = 300;
 
-const SYSTEM_PROMPT = `Je bent een zakelijke AI-assistent in het Bedrijfs Command Center van Adam.
+const systemPrompt = (name: string) => `Je bent een zakelijke AI-assistent in het Bedrijfs Command Center van ${name}.
 Je helpt met business-vragen, strategie, analyses en algemene ondersteuning.
 Antwoord in het Nederlands (tenzij de gebruiker een andere taal gebruikt), helder en zakelijk maar toegankelijk.
 Houd antwoorden beknopt waar het kan en gestructureerd waar het helpt.`;
+
+// Demo-modus: een mock-antwoord dat woord voor woord wordt gestreamd, zodat
+// de volledige chatflow (streamen, stoppen, regenereren, opslaan, exporteren)
+// zonder Anthropic-API te testen is.
+function demoReply(userMessage: string): string {
+  const quoted = userMessage.slice(0, 140);
+  return [
+    `**Demo-modus actief** — dit antwoord komt niet van Claude, maar wordt lokaal gegenereerd.`,
+    ``,
+    `Je vroeg: “${quoted}”`,
+    ``,
+    `In demo-modus werkt de hele app zoals normaal, alleen zonder API-kosten:`,
+    ``,
+    `- Antwoorden **streamen** woord voor woord het scherm in`,
+    `- De **stop-knop** bewaart het gedeeltelijke antwoord`,
+    `- **Opnieuw genereren** vervangt dit antwoord`,
+    `- De chat wordt opgeslagen in \`data/chats/\` en telt mee voor de export`,
+    ``,
+    `Ook syntax highlighting doet het gewoon:`,
+    ``,
+    "```ts",
+    `const antwoord = await assistant.beantwoord("${quoted.slice(0, 40).replace(/"/g, "'")}");`,
+    `console.log(antwoord);`,
+    "```",
+    ``,
+    `Zet demo-modus uit via **Instellingen → Demo-modus** zodra er API-tegoed is.`,
+  ].join("\n");
+}
 
 // Genereer met Haiku een korte, herkenbare titel na de eerste uitwisseling —
 // beter dan de eerste 60 tekens van het bericht.
@@ -37,13 +65,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Ongeldige aanvraag" }, { status: 400 });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return Response.json(
-      { error: "ANTHROPIC_API_KEY ontbreekt. Voeg deze toe aan .env.local" },
-      { status: 500 }
-    );
-  }
-
   let chat;
   if (regenerate === true) {
     // Opnieuw genereren: laatste assistent-antwoord vervangen door een nieuw.
@@ -65,14 +86,82 @@ export async function POST(request: Request) {
     chat =
       (typeof chatId === "string" && (await getChat(chatId))) ||
       newChat(userMessage);
-    chat.messages.push({ role: "user", content: userMessage });
+    chat.messages.push({
+      role: "user",
+      content: userMessage,
+      at: new Date().toISOString(),
+    });
+  }
+
+  const settings = await getSettings();
+
+  // Demo-modus: stream een mock-antwoord zonder de Anthropic-API aan te roepen.
+  if (settings.demoMode) {
+    const encoder = new TextEncoder();
+    const text = demoReply(
+      chat.messages.filter((m) => m.role === "user").at(-1)?.content ?? ""
+    );
+    let full = "";
+    let persisted = false;
+    let cancelled = false;
+
+    const persist = async () => {
+      if (persisted || full.length === 0) return;
+      persisted = true;
+      chat.messages.push({
+        role: "assistant",
+        content: full,
+        at: new Date().toISOString(),
+      });
+      await saveChat(chat);
+    };
+
+    const readable = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          // Splits op spaties maar behoud ze, zodat het als echte tokens oogt.
+          for (const part of text.split(/(?<= )/)) {
+            if (cancelled) break;
+            full += part;
+            controller.enqueue(encoder.encode(part));
+            await new Promise((r) => setTimeout(r, 14));
+          }
+          await persist();
+          if (!cancelled) controller.close();
+        } catch {
+          await persist();
+        }
+      },
+      async cancel() {
+        cancelled = true;
+        await persist();
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Chat-Id": chat.id,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return Response.json(
+      {
+        error:
+          "ANTHROPIC_API_KEY ontbreekt. Voeg deze toe aan .env.local, of zet demo-modus aan via Instellingen.",
+      },
+      { status: 500 }
+    );
   }
 
   const client = new Anthropic();
-  const settings = await getSettings();
+  const basePrompt = systemPrompt(settings.name);
   let system = settings.customInstructions
-    ? `${SYSTEM_PROMPT}\n\nAanvullende instructies van de gebruiker:\n${settings.customInstructions}`
-    : SYSTEM_PROMPT;
+    ? `${basePrompt}\n\nAanvullende instructies van de gebruiker:\n${settings.customInstructions}`
+    : basePrompt;
   if (chat.context) {
     system = `${system}\n\n${chat.context}`;
   }
@@ -102,7 +191,11 @@ export async function POST(request: Request) {
     const persist = async () => {
       if (persisted || full.length === 0) return;
       persisted = true;
-      chat.messages.push({ role: "assistant", content: full });
+      chat.messages.push({
+        role: "assistant",
+        content: full,
+        at: new Date().toISOString(),
+      });
       // Geef nieuwe chats na de eerste uitwisseling een korte AI-titel.
       if (chat.messages.length === 2 && !chat.context) {
         try {

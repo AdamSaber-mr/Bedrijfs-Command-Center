@@ -2,6 +2,61 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { RESEARCH_SCHEMA, type ResearchReport } from "@/lib/research";
 import { saveReport, type Citation } from "@/lib/reportStore";
+import { getSettings } from "@/lib/settings";
+
+// Demo-modus: een herkenbaar voorbeeldrapport zodat de hele research-flow
+// (laden, opslaan, sidebar, bronnen, chat-over-rapport) zonder API te testen is.
+// Scores zijn deterministisch afgeleid van de bedrijfsnaam.
+function demoReport(company: string): ResearchReport {
+  let hash = 0;
+  for (const ch of company) hash = (hash * 31 + ch.charCodeAt(0)) % 1000;
+  const marketScore = 40 + (hash % 55);
+  const fitScore = 35 + ((hash >> 2) % 60);
+  return {
+    company: {
+      name: company,
+      industry: "Demo-sector",
+      headquarters: "Amsterdam, Nederland",
+      founded: "2015",
+      size: "±120 medewerkers (voorbeeld)",
+      summary: `Dit is een demo-rapport over ${company}, lokaal gegenereerd zonder Anthropic-API. Alle cijfers en teksten zijn voorbeelddata om de app te testen.`,
+    },
+    market_position: {
+      score: marketScore,
+      position: marketScore >= 70 ? "Marktleider (demo)" : "Uitdager (demo)",
+      strengths: [
+        "Voorbeeldsterkte: sterk merk in de thuismarkt",
+        "Voorbeeldsterkte: efficiënte operatie",
+        "Voorbeeldsterkte: loyale klantenbasis",
+      ],
+      trends: [
+        "Voorbeeldtrend: toenemende digitalisering",
+        "Voorbeeldtrend: consolidatie in de sector",
+      ],
+      analysis: `Demo-analyse van de marktpositie van ${company}. In de echte modus doorzoekt Claude actuele bronnen en onderbouwt het deze sectie met feiten en cijfers.`,
+    },
+    competitors: [
+      { name: "Concurrent Alfa", description: "Grootste directe concurrent in dit demo-scenario.", threat_level: "hoog" },
+      { name: "Concurrent Beta", description: "Uitdager met overlappend aanbod.", threat_level: "middel" },
+      { name: "Concurrent Gamma", description: "Nichespeler met beperkte overlap.", threat_level: "laag" },
+    ],
+    partnership_fit: {
+      score: fitScore,
+      ideal_partner_profile: "Demo-profiel: partijen met complementaire technologie en een gedeelde doelgroep.",
+      opportunities: [
+        "Voorbeeldkans: gezamenlijke propositie richting mkb",
+        "Voorbeeldkans: data-uitwisseling en integraties",
+        "Voorbeeldkans: co-marketing in de Benelux",
+      ],
+      analysis: `Demo-onderbouwing van de partnership-fit met ${company}.`,
+    },
+    risks: [
+      { title: "Demo-risico: afhankelijkheid van één markt", severity: "middel", description: "Voorbeeldrisico ter illustratie van de rapportweergave." },
+      { title: "Demo-risico: regelgeving", severity: "laag", description: "Voorbeeldrisico ter illustratie." },
+    ],
+    conclusion: `Dit is een demo-conclusie over ${company}. Zet demo-modus uit via Instellingen en voer de analyse opnieuw uit zodra er API-tegoed is — dan is het rapport gebaseerd op actuele bronnen.`,
+  };
+}
 
 // Analyses met webzoeken kunnen enkele minuten duren.
 export const maxDuration = 300;
@@ -133,15 +188,29 @@ export async function POST(request: Request) {
     );
   }
 
+  const name = company.trim().slice(0, 120);
+  const settings = await getSettings();
+
+  if (settings.demoMode) {
+    // Kleine vertraging zodat de laad-ervaring realistisch blijft.
+    await new Promise((r) => setTimeout(r, 1500));
+    const saved = await saveReport(name, demoReport(name), [
+      { url: "https://example.com/demo-bron", title: "Demo-bron (voorbeeld, geen echte data)" },
+    ]);
+    return NextResponse.json({ saved });
+  }
+
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY ontbreekt. Voeg deze toe aan .env.local" },
+      {
+        error:
+          "ANTHROPIC_API_KEY ontbreekt. Voeg deze toe aan .env.local, of zet demo-modus aan via Instellingen.",
+      },
       { status: 500 }
     );
   }
 
   const client = new Anthropic();
-  const name = company.trim().slice(0, 120);
 
   try {
     let result: Awaited<ReturnType<typeof runAnalysis>>;
