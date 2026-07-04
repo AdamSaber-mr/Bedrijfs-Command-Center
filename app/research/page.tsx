@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AppShell, { REPORTS_UPDATED_EVENT } from "@/components/AppShell";
 import type { ThreatLevel } from "@/lib/research";
 import type { SavedReport } from "@/lib/reportStore";
+import { useCountUp } from "@/lib/animation";
 
 const EXAMPLES = ["ASML", "Adyen", "Coolblue", "Tesla", "Bol.com"];
 
@@ -48,6 +49,7 @@ function SeverityBadge({ level }: { level: ThreatLevel }) {
 
 function ScoreCard({ label, score, subtitle }: { label: string; score: number; subtitle: string }) {
   const clamped = Math.max(0, Math.min(100, score));
+  const shown = useCountUp(clamped);
   return (
     <div className="rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6">
       <div className="flex items-baseline justify-between gap-4">
@@ -55,7 +57,7 @@ function ScoreCard({ label, score, subtitle }: { label: string; score: number; s
           {label}
         </h3>
         <span className={`font-[family-name:var(--font-display)] text-4xl font-bold tabular-nums ${scoreColor(clamped)}`}>
-          {clamped}
+          {shown}
           <span className="text-base font-normal text-slate-500">/100</span>
         </span>
       </div>
@@ -241,7 +243,7 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
       </div>
 
       {/* Marktpositie */}
-      <SectionCard kicker="01 — Markt" title="Marktpositie">
+      <SectionCard kicker="01 — Markt" title="Marktpositie" className="animate-fade-up [animation-delay:0.08s]">
         <p className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">{report.market_position.analysis}</p>
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
           <div>
@@ -256,10 +258,10 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
       </SectionCard>
 
       {/* Concurrenten */}
-      <SectionCard kicker="02 — Concurrentie" title="Belangrijkste concurrenten">
+      <SectionCard kicker="02 — Concurrentie" title="Belangrijkste concurrenten" className="animate-fade-up [animation-delay:0.14s]">
         <div className="grid gap-4 sm:grid-cols-2">
           {report.competitors.map((c) => (
-            <div key={c.name} className="rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] p-5">
+            <div key={c.name} className="rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] p-5 transition hover:-translate-y-0.5 hover:border-accent-400/30">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-[family-name:var(--font-display)] font-semibold text-slate-900 dark:text-slate-100">
                   {c.name}
@@ -274,17 +276,17 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
       </SectionCard>
 
       {/* Partnership-fit */}
-      <SectionCard kicker="03 — Samenwerking" title="Partnership-fit">
+      <SectionCard kicker="03 — Samenwerking" title="Partnership-fit" className="animate-fade-up [animation-delay:0.2s]">
         <p className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">{report.partnership_fit.analysis}</p>
         <h3 className="mb-3 mt-6 text-sm font-semibold text-slate-800 dark:text-slate-200">Concrete kansen</h3>
         <BulletList items={report.partnership_fit.opportunities} />
       </SectionCard>
 
       {/* Risico's */}
-      <SectionCard kicker="04 — Risico" title="Risico's">
+      <SectionCard kicker="04 — Risico" title="Risico's" className="animate-fade-up [animation-delay:0.26s]">
         <div className="space-y-3">
           {report.risks.map((r) => (
-            <div key={r.title} className="rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] p-5">
+            <div key={r.title} className="rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] p-5 transition hover:-translate-y-0.5 hover:border-accent-400/30">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-semibold text-slate-900 dark:text-slate-100">{r.title}</h3>
                 <SeverityBadge level={r.severity} />
@@ -305,7 +307,7 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
 
       {/* Bronnen */}
       {saved.citations.length > 0 && (
-        <SectionCard kicker="Bronnen" title="Gebruikte bronnen">
+        <SectionCard kicker="Bronnen" title="Gebruikte bronnen" className="animate-fade-up [animation-delay:0.32s]">
           <ul className="grid gap-2 sm:grid-cols-2">
             {saved.citations.map((c) => (
               <li key={c.url}>
@@ -480,7 +482,7 @@ function ResearchView() {
                       setCompany(ex);
                       analyze(ex);
                     }}
-                    className="rounded-full border border-slate-900/10 dark:border-white/10 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 transition hover:border-accent-400/40 hover:text-slate-900 dark:hover:text-white"
+                    className="rounded-full border border-slate-900/10 dark:border-white/10 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:text-slate-900 dark:hover:text-white active:scale-95"
                   >
                     {ex}
                   </button>

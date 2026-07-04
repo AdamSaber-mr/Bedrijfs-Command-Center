@@ -60,7 +60,7 @@ const ICONS = {
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent-400 to-accent-600">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent-400 to-accent-600 transition-transform duration-200 hover:scale-105 active:scale-95">
         <svg viewBox="0 0 24 24" fill="white" className="h-4.5 w-4.5" aria-hidden>
           <path d="M13 2 4.5 13.5h5L11 22l8.5-11.5h-5L13 2z" />
         </svg>
@@ -311,12 +311,11 @@ function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 px-4 pt-[12vh] backdrop-blur-sm dark:bg-black/60"
+      className="animate-fade-in fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 px-4 pt-[12vh] backdrop-blur-sm dark:bg-black/60"
       onClick={onClose}
     >
       <div
-        className="animate-fade-up w-full max-w-lg overflow-hidden rounded-2xl border border-slate-900/10 bg-white shadow-2xl shadow-slate-900/20 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/60"
-        style={{ animationDuration: "0.2s" }}
+        className="animate-scale-in w-full max-w-lg overflow-hidden rounded-2xl border border-slate-900/10 bg-white shadow-2xl shadow-slate-900/20 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/60"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-slate-900/10 px-4 dark:border-white/10">
@@ -521,7 +520,7 @@ function Sidebar({
     else groups.push({ label, items: [chat] });
   }
 
-  const renderChat = (chat: ChatSummary) => {
+  const renderChat = (chat: ChatSummary, index = 0) => {
     if (renamingId === chat.id) {
       return (
         <div key={chat.id} className="px-1 py-0.5">
@@ -549,7 +548,8 @@ function Sidebar({
           router.push(`/chat?chat=${chat.id}`);
           onNavigate?.();
         }}
-        className={`group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
+        style={{ animationDelay: `${Math.min(index * 25, 200)}ms` }}
+        className={`animate-slide-in group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
           activeChatId === chat.id && pathname === "/chat"
             ? "bg-slate-900/10 text-slate-900 dark:bg-white/10 dark:text-white"
             : "text-slate-600 hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
@@ -632,7 +632,7 @@ function Sidebar({
             onNavigate?.();
           }}
           title={collapsed ? "Nieuwe chat" : undefined}
-          className={`flex w-full items-center gap-2.5 rounded-lg border border-accent-600/30 bg-accent-500/10 py-2 text-sm font-medium text-accent-700 transition hover:bg-accent-500/20 dark:border-accent-500/30 dark:text-accent-300 ${
+          className={`flex w-full items-center gap-2.5 rounded-lg border border-accent-600/30 bg-accent-500/10 py-2 text-sm font-medium text-accent-700 transition hover:bg-accent-500/20 active:scale-[0.98] dark:border-accent-500/30 dark:text-accent-300 ${
             collapsed ? "justify-center px-0" : "px-3"
           }`}
         >
@@ -679,14 +679,15 @@ function Sidebar({
                 <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-600">
                   Rapporten
                 </p>
-                {reports.slice(0, 5).map((report) => (
+                {reports.slice(0, 5).map((report, i) => (
                   <button
                     key={report.id}
                     onClick={() => {
                       router.push(`/research?report=${report.id}`);
                       onNavigate?.();
                     }}
-                    className={`group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
+                    style={{ animationDelay: `${Math.min(i * 25, 200)}ms` }}
+                    className={`animate-slide-in group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
                       activeReportId === report.id && pathname === "/research"
                         ? "bg-slate-900/10 text-slate-900 dark:bg-white/10 dark:text-white"
                         : "text-slate-600 hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
@@ -796,12 +797,11 @@ const SHORTCUTS: { keys: string[]; label: string }[] = [
 function ShortcutsModal({ onClose }: { onClose: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm dark:bg-black/60"
+      className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm dark:bg-black/60"
       onClick={onClose}
     >
       <div
-        className="animate-fade-up w-full max-w-sm rounded-2xl border border-slate-900/10 bg-white p-6 shadow-2xl shadow-slate-900/20 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/60"
-        style={{ animationDuration: "0.2s" }}
+        className="animate-scale-in w-full max-w-sm rounded-2xl border border-slate-900/10 bg-white p-6 shadow-2xl shadow-slate-900/20 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/60"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold text-slate-900 dark:text-slate-100">

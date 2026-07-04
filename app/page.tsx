@@ -7,6 +7,7 @@ import AppShell from "@/components/AppShell";
 import type { ChatSummary } from "@/lib/chatStore";
 import type { ReportSummary } from "@/lib/reportStore";
 import { useGreeting } from "@/lib/greeting";
+import { useTypewriter } from "@/lib/animation";
 
 function relativeTime(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -33,6 +34,7 @@ function DashboardView() {
   const [reports, setReports] = useState<ReportSummary[] | null>(null);
   const [question, setQuestion] = useState("");
   const { greeting, tagline } = useGreeting();
+  const typed = useTypewriter(greeting);
 
   useEffect(() => {
     (async () => {
@@ -65,16 +67,16 @@ function DashboardView() {
     <main className="mx-auto w-full max-w-5xl px-4 pb-10 sm:px-8">
       {/* Hero: begroeting + directe vraag */}
       <header className="flex flex-col items-center pt-20 text-center sm:pt-28">
-        <h1
-          key={greeting}
-          className="animate-fade-up min-h-[44px] font-[family-name:var(--font-display)] text-3xl font-semibold text-slate-900 dark:text-white sm:text-4xl"
-        >
-          {greeting}
+        <h1 className="min-h-[44px] font-[family-name:var(--font-display)] text-3xl font-semibold text-slate-900 dark:text-white sm:text-4xl">
+          {typed.display}
+          {greeting && !typed.done && (
+            <span className="animate-blink ml-1 inline-block h-[0.85em] w-[3px] rounded bg-accent-400 align-baseline" />
+          )}
         </h1>
         <p
-          key={tagline}
-          className="animate-fade-up mt-2 min-h-[24px] text-[15px] text-slate-500 dark:text-slate-400"
-          style={{ animationDelay: "0.05s" }}
+          className={`mt-2 min-h-[24px] text-[15px] text-slate-500 transition-opacity duration-500 dark:text-slate-400 ${
+            typed.done ? "opacity-100" : "opacity-0"
+          }`}
         >
           {tagline}
         </p>
@@ -91,7 +93,7 @@ function DashboardView() {
               type="submit"
               disabled={question.trim().length === 0}
               aria-label="Verstuur"
-              className="shrink-0 rounded-xl bg-accent-500 px-4 py-2.5 text-sm font-semibold text-accent-950 transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="shrink-0 rounded-xl bg-accent-500 px-4 py-2.5 text-sm font-semibold text-accent-950 transition hover:bg-accent-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               ↑
             </button>
@@ -100,13 +102,13 @@ function DashboardView() {
         <div className="animate-fade-up mt-5 flex flex-wrap justify-center gap-2" style={{ animationDelay: "0.12s" }}>
           <Link
             href="/chat"
-            className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-accent-400/40 hover:text-slate-800 dark:hover:text-slate-200"
+            className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:text-slate-800 dark:hover:text-slate-200 active:scale-95"
           >
             ＋ Nieuwe chat
           </Link>
           <Link
             href="/research"
-            className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-accent-400/40 hover:text-slate-800 dark:hover:text-slate-200"
+            className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:text-slate-800 dark:hover:text-slate-200 active:scale-95"
           >
             Deal Research
           </Link>
@@ -140,11 +142,12 @@ function DashboardView() {
                 Nog geen chats — stel hierboven je eerste vraag.
               </p>
             )}
-            {(chats ?? []).slice(0, 6).map((chat) => (
+            {(chats ?? []).slice(0, 6).map((chat, i) => (
               <Link
                 key={chat.id}
                 href={`/chat?chat=${chat.id}`}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 transition hover:border-accent-400/40"
+                className="animate-fade-up flex items-center justify-between gap-3 rounded-xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:shadow-md hover:shadow-slate-900/5 dark:hover:shadow-black/20"
+                style={{ animationDelay: `${0.05 + i * 0.05}s` }}
               >
                 <span className="min-w-0 flex-1 truncate text-sm text-slate-800 dark:text-slate-200">
                   {chat.title}
@@ -180,11 +183,12 @@ function DashboardView() {
                 .
               </p>
             )}
-            {(reports ?? []).slice(0, 6).map((report) => (
+            {(reports ?? []).slice(0, 6).map((report, i) => (
               <Link
                 key={report.id}
                 href={`/research?report=${report.id}`}
-                className="flex items-center justify-between gap-4 rounded-xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 transition hover:border-accent-400/40"
+                className="animate-fade-up flex items-center justify-between gap-4 rounded-xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:shadow-md hover:shadow-slate-900/5 dark:hover:shadow-black/20"
+                style={{ animationDelay: `${0.05 + i * 0.05}s` }}
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200">

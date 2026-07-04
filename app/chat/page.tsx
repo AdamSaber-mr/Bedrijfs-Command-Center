@@ -7,6 +7,7 @@ import rehypeHighlight from "rehype-highlight";
 import AppShell, { CHATS_UPDATED_EVENT } from "@/components/AppShell";
 import type { ChatMessage } from "@/lib/chatStore";
 import { useGreeting } from "@/lib/greeting";
+import { useTypewriter } from "@/lib/animation";
 
 const SUGGESTIONS = [
   "Schrijf een professionele e-mail",
@@ -51,7 +52,7 @@ function MessageBubble({
 }) {
   if (message.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="animate-message-in flex justify-end">
         <div
           title={
             message.at
@@ -68,8 +69,10 @@ function MessageBubble({
       </div>
     );
   }
+  const streaming = busy && isLast && message.content.length > 0;
+
   return (
-    <div className="group">
+    <div className="animate-message-in group">
       <div className="min-w-0 max-w-[92%]">
         <div className="markdown text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">
           {message.content ? (
@@ -86,6 +89,9 @@ function MessageBubble({
             </span>
           )}
         </div>
+        {streaming && (
+          <span className="animate-blink mt-1 inline-block h-4 w-[2px] rounded bg-accent-400" />
+        )}
         {message.content && !busy && (
           <div className="mt-1.5 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <CopyButton text={message.content} />
@@ -239,6 +245,7 @@ function ChatView() {
 
   const empty = messages.length === 0;
   const { greeting, tagline } = useGreeting();
+  const typed = useTypewriter(greeting);
 
   const composer = (
     <form
@@ -287,7 +294,7 @@ function ChatView() {
             type="submit"
             disabled={input.trim().length === 0}
             aria-label="Verstuur"
-            className="shrink-0 rounded-xl bg-accent-500 px-4 py-2.5 text-sm font-semibold text-accent-950 transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-40"
+            className="shrink-0 rounded-xl bg-accent-500 px-4 py-2.5 text-sm font-semibold text-accent-950 transition hover:bg-accent-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ↑
           </button>
@@ -299,26 +306,29 @@ function ChatView() {
   if (empty) {
     return (
       <div className="mx-auto flex h-full w-full max-w-2xl flex-col items-center justify-center px-6 pb-24">
-        <h1
-          key={greeting}
-          className="animate-fade-up min-h-[44px] text-center font-[family-name:var(--font-display)] text-3xl font-semibold text-slate-900 dark:text-white sm:text-4xl"
-        >
-          {greeting}
+        <h1 className="min-h-[44px] text-center font-[family-name:var(--font-display)] text-3xl font-semibold text-slate-900 dark:text-white sm:text-4xl">
+          {typed.display}
+          {greeting && !typed.done && (
+            <span className="animate-blink ml-1 inline-block h-[0.85em] w-[3px] rounded bg-accent-400 align-baseline" />
+          )}
         </h1>
         <p
-          key={tagline}
-          className="animate-fade-up mt-2 min-h-[24px] text-center text-[15px] text-slate-500 dark:text-slate-400"
-          style={{ animationDelay: "0.05s" }}
+          className={`mt-2 min-h-[24px] text-center text-[15px] text-slate-500 transition-opacity duration-500 dark:text-slate-400 ${
+            typed.done ? "opacity-100" : "opacity-0"
+          }`}
         >
           {tagline}
         </p>
-        <div className="mt-7 w-full">{composer}</div>
+        <div className="animate-fade-up mt-7 w-full" style={{ animationDelay: "0.15s" }}>
+          {composer}
+        </div>
         <div className="mt-5 flex flex-wrap justify-center gap-2">
-          {SUGGESTIONS.map((s) => (
+          {SUGGESTIONS.map((s, i) => (
             <button
               key={s}
               onClick={() => send(s)}
-              className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-accent-400/40 hover:text-slate-800 dark:hover:text-slate-200"
+              className="animate-fade-up rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:text-slate-800 dark:hover:text-slate-200 active:scale-95"
+              style={{ animationDelay: `${0.3 + i * 0.07}s` }}
             >
               {s}
             </button>

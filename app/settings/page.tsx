@@ -155,7 +155,7 @@ function SettingsView() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-4 py-10 sm:px-8">
+    <main className="stagger-children mx-auto max-w-3xl space-y-6 px-4 py-10 sm:px-8">
       <header className="flex items-baseline justify-between gap-4">
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl">
