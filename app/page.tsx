@@ -28,10 +28,88 @@ function scoreColor(score: number) {
   return "text-red-700 dark:text-red-300";
 }
 
+interface DayStat {
+  date: string;
+  count: number;
+}
+
+// Mini-staafdiagram: berichten per dag (één serie, accent-600 op beide
+// thema's — gevalideerd op contrast; het max-label en de tooltip zijn de
+// zichtbare waardelaag).
+function ActivityChart({ days }: { days: DayStat[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const max = Math.max(...days.map((d) => d.count), 1);
+  const total = days.reduce((sum, d) => sum + d.count, 0);
+  const maxIndex = total > 0 ? days.findIndex((d) => d.count === max) : -1;
+  const weekday = (iso: string) =>
+    new Date(`${iso}T12:00:00`).toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" });
+
+  return (
+    <section
+      className="animate-fade-up mx-auto mt-10 w-full max-w-2xl rounded-2xl border border-slate-900/10 bg-white p-5 dark:border-white/10 dark:bg-white/[0.03]"
+      style={{ animationDelay: "0.22s" }}
+    >
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Activiteit · berichten per dag
+        </h2>
+        <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
+          {total} in 14 dagen
+        </span>
+      </div>
+      <div className="mt-3 flex h-16 items-end gap-[3px]" role="img" aria-label={`Berichten per dag, laatste 14 dagen, totaal ${total}`}>
+        {days.map((d, i) => (
+          <div
+            key={d.date}
+            onMouseEnter={() => setHover(i)}
+            onMouseLeave={() => setHover(null)}
+            className="relative flex h-full flex-1 items-end"
+          >
+            {(hover === i || (hover === null && i === maxIndex)) && d.count > 0 && (
+              <span className="absolute -top-1 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-slate-900/10 bg-white px-1.5 py-0.5 text-[10px] tabular-nums text-slate-700 shadow-sm dark:border-white/10 dark:bg-[#0d1526] dark:text-slate-300">
+                {hover === i ? `${weekday(d.date)} · ${d.count}` : d.count}
+              </span>
+            )}
+            <div
+              style={{
+                height: d.count > 0 ? `${Math.max(8, (d.count / max) * 100)}%` : "3px",
+                backgroundColor: d.count > 0 ? "var(--accent-600)" : undefined,
+              }}
+              className={`w-full rounded-t-[3px] transition-opacity ${
+                d.count === 0
+                  ? "bg-slate-900/15 dark:bg-white/10"
+                  : hover !== null && hover !== i
+                    ? "opacity-50"
+                    : ""
+              }`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1.5 flex justify-between text-[10px] text-slate-400 dark:text-slate-600">
+        <span>{weekday(days[0].date)}</span>
+        <span>vandaag</span>
+      </div>
+      <table className="sr-only">
+        <caption>Berichten per dag, laatste 14 dagen</caption>
+        <tbody>
+          {days.map((d) => (
+            <tr key={d.date}>
+              <th scope="row">{d.date}</th>
+              <td>{d.count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 function DashboardView() {
   const router = useRouter();
   const [chats, setChats] = useState<ChatSummary[] | null>(null);
   const [reports, setReports] = useState<ReportSummary[] | null>(null);
+  const [stats, setStats] = useState<DayStat[] | null>(null);
   const [question, setQuestion] = useState("");
   const { greeting, tagline } = useGreeting();
   const typed = useTypewriter(greeting);
@@ -39,17 +117,21 @@ function DashboardView() {
   useEffect(() => {
     (async () => {
       try {
-        const [chatsRes, reportsRes] = await Promise.all([
+        const [chatsRes, reportsRes, statsRes] = await Promise.all([
           fetch("/api/chats"),
           fetch("/api/reports"),
+          fetch("/api/stats"),
         ]);
         const chatsData = await chatsRes.json();
         const reportsData = await reportsRes.json();
+        const statsData = await statsRes.json();
         setChats(chatsData.chats ?? []);
         setReports(reportsData.reports ?? []);
+        setStats(statsData.days ?? []);
       } catch {
         setChats([]);
         setReports([]);
+        setStats([]);
       }
     })();
   }, []);
@@ -121,6 +203,10 @@ function DashboardView() {
           </p>
         )}
       </header>
+
+      {stats !== null && stats.length > 0 && stats.some((d) => d.count > 0) && (
+        <ActivityChart days={stats} />
+      )}
 
       <div className="mt-14 grid gap-8 lg:grid-cols-2">
         {/* Recente chats */}

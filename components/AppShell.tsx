@@ -55,6 +55,8 @@ const ICONS = {
   monitor: "M4 5h16v11H4zM9 20h6M12 16v4",
   pin: "M9 3h6l-1 6 3.5 3v1h-11v-1L10 9 9 3zM12 13v8",
   pencil: "M4 20l1.2-4L16.5 4.7a2.1 2.1 0 013 3L8.2 19 4 20z",
+  archive: "M3 6h18v4H3zM5 10v10h14V10M10 14h4",
+  note: "M5 3h14v18l-4-3H5zM9 8h6M9 12h4",
 };
 
 function Logo({ compact = false }: { compact?: boolean }) {
@@ -177,9 +179,10 @@ interface PaletteItem {
 interface SearchHits {
   chats: { id: string; title: string; snippet: string }[];
   reports: { id: string; company: string; snippet: string }[];
+  notes: { id: string; title: string; snippet: string }[];
 }
 
-const NO_HITS: SearchHits = { chats: [], reports: [] };
+const NO_HITS: SearchHits = { chats: [], reports: [], notes: [] };
 
 function CommandPalette({
   onClose,
@@ -194,7 +197,25 @@ function CommandPalette({
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const [hits, setHits] = useState<SearchHits>(NO_HITS);
+  const [prompts, setPrompts] = useState<{ id: string; title: string; text: string }[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Prompt-sjablonen laden zodra het palet opent.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/prompts");
+        const data = await res.json();
+        if (!cancelled) setPrompts(data.prompts ?? []);
+      } catch {
+        // sjablonen mogen stil falen
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Full-text zoeken in de inhoud van chats en rapporten, licht gedebounced.
   useEffect(() => {
@@ -220,6 +241,8 @@ function CommandPalette({
       { id: "new-chat", group: "Acties", label: "Nieuwe chat", icon: ICONS.plus, run: go("/chat") },
       { id: "dashboard", group: "Acties", label: "Dashboard", icon: ICONS.dashboard, run: go("/") },
       { id: "research", group: "Acties", label: "Deal Research", icon: ICONS.research, run: go("/research") },
+      { id: "notes", group: "Acties", label: "Notities", icon: ICONS.note, run: go("/notes") },
+      { id: "archive", group: "Acties", label: "Archief", icon: ICONS.archive, run: go("/archief") },
       { id: "settings", group: "Acties", label: "Instellingen", icon: ICONS.settings, run: go("/settings") },
       {
         id: "theme",
@@ -259,10 +282,24 @@ function CommandPalette({
       icon: ICONS.report,
       run: go(`/research?report=${r.id}`),
     }));
+    const promptItems: PaletteItem[] = prompts.map((p) => ({
+      id: `prompt-${p.id}`,
+      group: "Sjablonen",
+      label: p.title,
+      hint: p.text,
+      icon: ICONS.pencil,
+      run: go(`/chat?draft=${encodeURIComponent(p.text)}`),
+    }));
 
-    const all = [...actions, ...chatItems, ...reportItems];
+    const all = [...actions, ...chatItems, ...reportItems, ...promptItems];
     const q = query.trim().toLowerCase();
-    if (!q) return [...actions, ...chatItems.slice(0, 5), ...reportItems.slice(0, 4)];
+    if (!q)
+      return [
+        ...actions,
+        ...chatItems.slice(0, 5),
+        ...reportItems.slice(0, 4),
+        ...promptItems.slice(0, 3),
+      ];
 
     const byTitle = all.filter((item) => item.label.toLowerCase().includes(q)).slice(0, 10);
     const shown = new Set(byTitle.map((item) => item.id));
@@ -290,10 +327,18 @@ function CommandPalette({
           icon: ICONS.report,
           run: go(`/research?report=${hit.id}`),
         })),
+      ...(hits.notes ?? []).map((hit) => ({
+        id: `note-${hit.id}`,
+        group: "Notities",
+        label: hit.title,
+        hint: hit.snippet,
+        icon: ICONS.note,
+        run: go(`/notes?note=${hit.id}`),
+      })),
     ];
 
     return [...byTitle, ...contentItems].slice(0, 14);
-  }, [query, chats, reports, hits, router, onClose]);
+  }, [query, chats, reports, prompts, hits, router, onClose]);
 
   // Houd de selectie in beeld bij navigatie met pijltjestoetsen.
   useEffect(() => {
@@ -655,6 +700,22 @@ function Sidebar({
           collapsed={collapsed}
           onNavigate={onNavigate}
         />
+        <NavLink
+          href="/notes"
+          icon={ICONS.note}
+          label="Notities"
+          active={pathname === "/notes"}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+        <NavLink
+          href="/archief"
+          icon={ICONS.archive}
+          label="Archief"
+          active={pathname === "/archief"}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
       </div>
 
       {!collapsed && (
@@ -885,6 +946,10 @@ function getCollapsed() {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const mobileOpenRef = useRef(false);
+  useEffect(() => {
+    mobileOpenRef.current = mobileOpen;
+  }, [mobileOpen]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [resizing, setResizing] = useState(false);
@@ -991,6 +1056,43 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [router]);
 
+  // Edge-swipe op touch-apparaten: vanaf de linkerrand naar rechts vegen
+  // opent de sidebar; naar links vegen sluit hem weer.
+  useEffect(() => {
+    let startX = 0;
+    let startY = 0;
+    let tracking = false;
+    function onTouchStart(e: TouchEvent) {
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      tracking = touch.clientX < 28 || mobileOpenRef.current;
+    }
+    function onTouchMove(e: TouchEvent) {
+      if (!tracking) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - startX;
+      const dy = Math.abs(touch.clientY - startY);
+      if (dy > 60) {
+        tracking = false;
+        return;
+      }
+      if (dx > 60 && !mobileOpenRef.current) {
+        tracking = false;
+        setMobileOpen(true);
+      } else if (dx < -60 && mobileOpenRef.current) {
+        tracking = false;
+        setMobileOpen(false);
+      }
+    }
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+    };
+  }, []);
+
   // Volg live wijzigingen van het OS-thema wanneer "Auto" actief is.
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -1004,7 +1106,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden">
+    <div className="flex h-dvh w-full overflow-hidden print:block print:h-auto print:overflow-visible">
       {/* Desktop sidebar */}
       <div className="relative hidden md:flex">
         <Sidebar
@@ -1055,7 +1157,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobiele topbalk */}
-        <div className="flex items-center gap-3 border-b border-slate-900/10 px-4 py-3 dark:border-white/10 md:hidden">
+        <div className="flex items-center gap-3 border-b border-slate-900/10 px-4 py-3 dark:border-white/10 md:hidden print:hidden">
           <button
             onClick={() => setMobileOpen(true)}
             aria-label="Open menu"
@@ -1068,7 +1170,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto print:overflow-visible">{children}</div>
       </div>
 
       {paletteOpen && (
