@@ -12,52 +12,20 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ChatSummary } from "@/lib/chatStore";
 import type { ReportSummary } from "@/lib/reportStore";
+import { CHATS_UPDATED_EVENT, REPORTS_UPDATED_EVENT } from "@/lib/events";
+import {
+  Icon,
+  ICONS,
+  ThemeToggle,
+  applyThemeMode,
+  currentTheme,
+  getThemeMode,
+} from "@/components/ui";
+import SettingsModal, { type SettingsTab } from "@/components/SettingsModal";
 
-// Sidebar-refresh: chatpagina stuurt dit event na elk voltooid bericht.
-export const CHATS_UPDATED_EVENT = "chats-updated";
-// Idem voor deal-rapporten, na een afgeronde of verwijderde analyse.
-export const REPORTS_UPDATED_EVENT = "reports-updated";
-
-/* ---------- Iconen ---------- */
-
-function Icon({ d, className = "h-[18px] w-[18px]" }: { d: string; className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={`shrink-0 ${className}`}
-      aria-hidden
-    >
-      <path d={d} />
-    </svg>
-  );
-}
-
-const ICONS = {
-  dashboard: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
-  chat: "M21 12c0 4.1-4 7.5-9 7.5-1 0-2-.13-2.9-.38L4 21l1.3-3.3A7.1 7.1 0 013 12c0-4.1 4-7.5 9-7.5s9 3.4 9 7.5z",
-  research: "M3 17l6-6 4 4 8-8M15 7h6v6",
-  report: "M7 3h7l5 5v13H7zM14 3v5h5M10.5 13h7M10.5 17h7",
-  settings:
-    "M4 8h9M17.5 8H20M13.5 8a2 2 0 104 0 2 2 0 00-4 0zM4 16h2.5M10.5 16H20M6.5 16a2 2 0 104 0 2 2 0 00-4 0z",
-  plus: "M12 5v14M5 12h14",
-  search: "M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-4.35-4.35",
-  download: "M12 3v12m0 0l-4-4m4 4l4-4M5 21h14",
-  close: "M6 6l12 12M18 6L6 18",
-  chevronLeft: "M15 6l-6 6 6 6",
-  chevronRight: "M9 6l6 6-6 6",
-  sun: "M12 17a5 5 0 100-10 5 5 0 000 10zM12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4",
-  moon: "M21 13A8.5 8.5 0 0111 3a8.5 8.5 0 102 10z",
-  monitor: "M4 5h16v11H4zM9 20h6M12 16v4",
-  pin: "M9 3h6l-1 6 3.5 3v1h-11v-1L10 9 9 3zM12 13v8",
-  pencil: "M4 20l1.2-4L16.5 4.7a2.1 2.1 0 013 3L8.2 19 4 20z",
-  archive: "M3 6h18v4H3zM5 10v10h14V10M10 14h4",
-  note: "M5 3h14v18l-4-3H5zM9 8h6M9 12h4",
-};
+// Her-export voor bestaande importeurs (chat-/research-pagina's).
+export { CHATS_UPDATED_EVENT, REPORTS_UPDATED_EVENT } from "@/lib/events";
+export { ThemeToggle } from "@/components/ui";
 
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
@@ -93,78 +61,6 @@ function relativeDay(iso: string) {
   return "Ouder";
 }
 
-function currentTheme(): "dark" | "light" {
-  return typeof document !== "undefined" &&
-    document.documentElement.classList.contains("dark")
-    ? "dark"
-    : "light";
-}
-
-// Thema kent drie standen: licht, donker of systeem (volgt het OS).
-// De keuze leeft in localStorage; "systeem" = geen opgeslagen waarde.
-type ThemeMode = "light" | "dark" | "system";
-const THEME_MODE_EVENT = "theme-mode-changed";
-
-function subscribeThemeMode(onChange: () => void) {
-  window.addEventListener(THEME_MODE_EVENT, onChange);
-  return () => window.removeEventListener(THEME_MODE_EVENT, onChange);
-}
-
-function getThemeMode(): ThemeMode {
-  try {
-    const stored = localStorage.getItem("theme");
-    return stored === "light" || stored === "dark" ? stored : "system";
-  } catch {
-    return "system";
-  }
-}
-
-function systemPrefersDark() {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
-function applyThemeMode(mode: ThemeMode) {
-  try {
-    if (mode === "system") localStorage.removeItem("theme");
-    else localStorage.setItem("theme", mode);
-  } catch {
-    // privémodus zonder localStorage — thema geldt dan alleen deze sessie
-  }
-  const dark = mode === "dark" || (mode === "system" && systemPrefersDark());
-  document.documentElement.classList.toggle("dark", dark);
-  window.dispatchEvent(new Event(THEME_MODE_EVENT));
-}
-
-export function ThemeToggle() {
-  const mode = useSyncExternalStore(subscribeThemeMode, getThemeMode, () => "system");
-
-  return (
-    <div className="flex rounded-lg border border-slate-900/10 p-0.5 dark:border-white/10">
-      {(
-        [
-          { value: "light", label: "Licht", icon: ICONS.sun },
-          { value: "system", label: "Auto", icon: ICONS.monitor },
-          { value: "dark", label: "Donker", icon: ICONS.moon },
-        ] as const
-      ).map((option) => (
-        <button
-          key={option.value}
-          onClick={() => applyThemeMode(option.value)}
-          aria-pressed={mode === option.value}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition ${
-            mode === option.value
-              ? "bg-accent-500/15 text-accent-700 dark:text-accent-300"
-              : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-          }`}
-        >
-          <Icon d={option.icon} className="h-3.5 w-3.5" />
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /* ---------- Command palette (⌘K) ---------- */
 
 interface PaletteItem {
@@ -186,10 +82,12 @@ const NO_HITS: SearchHits = { chats: [], reports: [], notes: [] };
 
 function CommandPalette({
   onClose,
+  onOpenSettings,
   chats,
   reports,
 }: {
   onClose: () => void;
+  onOpenSettings: (tab: SettingsTab) => void;
   chats: ChatSummary[];
   reports: ReportSummary[];
 }) {
@@ -242,8 +140,26 @@ function CommandPalette({
       { id: "dashboard", group: "Acties", label: "Dashboard", icon: ICONS.dashboard, run: go("/") },
       { id: "research", group: "Acties", label: "Deal Research", icon: ICONS.research, run: go("/research") },
       { id: "notes", group: "Acties", label: "Notities", icon: ICONS.note, run: go("/notes") },
-      { id: "archive", group: "Acties", label: "Archief", icon: ICONS.archive, run: go("/settings?tab=archief") },
-      { id: "settings", group: "Acties", label: "Instellingen", icon: ICONS.settings, run: go("/settings") },
+      {
+        id: "archive",
+        group: "Acties",
+        label: "Archief",
+        icon: ICONS.archive,
+        run: () => {
+          onOpenSettings("archief");
+          onClose();
+        },
+      },
+      {
+        id: "settings",
+        group: "Acties",
+        label: "Instellingen",
+        icon: ICONS.settings,
+        run: () => {
+          onOpenSettings("profiel");
+          onClose();
+        },
+      },
       {
         id: "theme",
         group: "Acties",
@@ -338,7 +254,7 @@ function CommandPalette({
     ];
 
     return [...byTitle, ...contentItems].slice(0, 14);
-  }, [query, chats, reports, prompts, hits, router, onClose]);
+  }, [query, chats, reports, prompts, hits, router, onClose, onOpenSettings]);
 
   // Houd de selectie in beeld bij navigatie met pijltjestoetsen.
   useEffect(() => {
@@ -479,6 +395,7 @@ function Sidebar({
   onToggleCollapse,
   onNavigate,
   onOpenPalette,
+  onOpenSettings,
   refreshChats,
   refreshReports,
 }: {
@@ -490,6 +407,7 @@ function Sidebar({
   onToggleCollapse?: () => void;
   onNavigate?: () => void;
   onOpenPalette: () => void;
+  onOpenSettings: () => void;
   refreshChats: () => void;
   refreshReports: () => void;
 }) {
@@ -800,14 +718,16 @@ function Sidebar({
                 </span>
               </span>
             </a>
-            <NavLink
-              href="/settings"
-              icon={ICONS.settings}
-              label="Instellingen"
-              active={pathname === "/settings"}
-              collapsed={false}
-              onNavigate={onNavigate}
-            />
+            <button
+              onClick={() => {
+                onOpenSettings();
+                onNavigate?.();
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-900/5 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"
+            >
+              <Icon d={ICONS.settings} />
+              Instellingen
+            </button>
           </div>
         </>
       )}
@@ -821,14 +741,16 @@ function Sidebar({
           >
             <Icon d={ICONS.search} />
           </button>
-          <NavLink
-            href="/settings"
-            icon={ICONS.settings}
-            label="Instellingen"
-            active={pathname === "/settings"}
-            collapsed
-            onNavigate={onNavigate}
-          />
+          <button
+            onClick={() => {
+              onOpenSettings();
+              onNavigate?.();
+            }}
+            title="Instellingen"
+            className="flex w-full justify-center rounded-lg py-2 text-slate-500 transition hover:bg-slate-900/5 hover:text-slate-800 dark:hover:bg-white/5 dark:hover:text-slate-200"
+          >
+            <Icon d={ICONS.settings} />
+          </button>
         </div>
       )}
     </aside>
@@ -935,8 +857,18 @@ function getCollapsed() {
   }
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({
+  children,
+  initialSettingsTab,
+}: {
+  children: React.ReactNode;
+  initialSettingsTab?: SettingsTab;
+}) {
   const router = useRouter();
+  const pathname = usePathname();
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(
+    initialSettingsTab ?? null
+  );
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobileOpenRef = useRef(false);
   useEffect(() => {
@@ -1003,6 +935,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       window.removeEventListener(REPORTS_UPDATED_EVENT, refreshReports);
     };
   }, [refreshChats, refreshReports]);
+
+  // Instellingen-popup sluiten; op de /settings-deeplink navigeren we terug.
+  function closeSettings() {
+    setSettingsTab(null);
+    if (pathname === "/settings") router.replace("/");
+  }
 
   function toggleCollapse() {
     try {
@@ -1109,6 +1047,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           resizing={resizing}
           onToggleCollapse={toggleCollapse}
           onOpenPalette={() => setPaletteOpen(true)}
+          onOpenSettings={() => setSettingsTab("profiel")}
           refreshChats={refreshChats}
           refreshReports={refreshReports}
         />
@@ -1137,6 +1076,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               setMobileOpen(false);
               setPaletteOpen(true);
             }}
+            onOpenSettings={() => setSettingsTab("profiel")}
             refreshChats={refreshChats}
             refreshReports={refreshReports}
           />
@@ -1168,11 +1108,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {paletteOpen && (
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
+          onOpenSettings={(tab) => setSettingsTab(tab)}
           chats={chats}
           reports={reports}
         />
       )}
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+      {settingsTab && (
+        <SettingsModal
+          tab={settingsTab}
+          onTabChange={setSettingsTab}
+          onClose={closeSettings}
+        />
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CHATS_UPDATED_EVENT, REPORTS_UPDATED_EVENT } from "@/components/AppShell";
+import { CHATS_UPDATED_EVENT, REPORTS_UPDATED_EVENT } from "@/lib/events";
 import type { ChatSummary } from "@/lib/chatStore";
 import type { ReportSummary, SavedReport } from "@/lib/reportStore";
 
