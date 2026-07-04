@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { allChats } from "@/lib/chatStore";
 import { getReport, listReports } from "@/lib/reportStore";
+import { allNotes } from "@/lib/noteStore";
 
 // Full-text zoeken voor het ⌘K-palette: doorzoekt de inhoud van chats en
 // rapporten (titels doet het palette zelf al client-side).
@@ -20,7 +21,7 @@ function snippetAround(text: string, query: string, radius = 45): string {
 export async function GET(request: Request) {
   const q = new URL(request.url).searchParams.get("q")?.trim().toLowerCase() ?? "";
   if (q.length < 2) {
-    return NextResponse.json({ chats: [], reports: [] });
+    return NextResponse.json({ chats: [], reports: [], notes: [] });
   }
 
   const chats = (await allChats())
@@ -65,5 +66,18 @@ export async function GET(request: Request) {
     .filter((r) => r !== null)
     .slice(0, 4);
 
-  return NextResponse.json({ chats, reports });
+  const notes = (await allNotes())
+    .map((note) => {
+      const haystack = `${note.title}\n${note.content}`;
+      if (!haystack.toLowerCase().includes(q)) return null;
+      return {
+        id: note.id,
+        title: note.title,
+        snippet: snippetAround(note.content, q) || note.title,
+      };
+    })
+    .filter((n) => n !== null)
+    .slice(0, 4);
+
+  return NextResponse.json({ chats, reports, notes });
 }
