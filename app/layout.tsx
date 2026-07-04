@@ -18,9 +18,9 @@ const monoFont = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Company & Deal Research Assistant",
+  title: "Bedrijfs Command Center",
   description:
-    "Voer een bedrijfsnaam in en ontvang direct een gestructureerde business-analyse: marktpositie, concurrenten, partnership-fit en risico's — aangedreven door Claude.",
+    "Zakelijke AI-werkplek aangedreven door Claude: chat met opgeslagen gesprekken, deal-research met gestructureerde business-analyses en exporteerbare trainingsdata.",
 };
 
 export default function RootLayout({

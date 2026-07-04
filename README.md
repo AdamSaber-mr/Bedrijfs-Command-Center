@@ -1,16 +1,21 @@
 # Bedrijfs Command Center
 
-Een zakelijke AI-werkplek aangedreven door de Claude API, met twee onderdelen:
+Een zakelijke AI-werkplek aangedreven door de Claude API, met drie onderdelen:
 
-1. **AI-chat met sidebar** — chatten met Claude in een cleane interface zoals ChatGPT/Claude.ai. Elke chat wordt automatisch opgeslagen en is exporteerbaar als trainingsdata.
-2. **Company & Deal Research Assistant** — voer een bedrijfsnaam in en ontvang een gestructureerde business-analyse.
+1. **Dashboard** (`/`) — overzicht met recente chats, opgeslagen deal-rapporten, statistieken en een directe vraagbalk.
+2. **AI-chat** (`/chat`) — chatten met Claude in een cleane interface zoals ChatGPT/Claude.ai. Elke chat wordt automatisch opgeslagen en is exporteerbaar als trainingsdata.
+3. **Company & Deal Research Assistant** (`/research`) — voer een bedrijfsnaam in en ontvang een gestructureerde business-analyse die wordt opgeslagen, inclusief bronvermeldingen.
+
+Overal beschikbaar: een **command palette** (⌘K / Ctrl+K) om te zoeken door chats, rapporten en acties, een **inklapbare sidebar** met chat-filter, en een licht/donker thema.
 
 ## AI-chat & trainingsdata
 
-- Chats verschijnen in de sidebar, gegroepeerd op datum (vandaag / gisteren / deze week / ouder), en zijn te heropenen en verwijderen.
+- Chats verschijnen in de sidebar, gegroepeerd op datum (vandaag / gisteren / deze week / ouder), en zijn te heropenen, filteren en verwijderen.
+- Nieuwe chats krijgen na de eerste uitwisseling automatisch een korte AI-titel (gegenereerd door Haiku).
+- Antwoorden streamen live het scherm in met markdown-weergave en syntax highlighting; genereren is te stoppen met de **Stop**-knop (het gedeeltelijke antwoord blijft bewaard).
+- Per antwoord: **kopieer**-knop en — bij het laatste antwoord — **genereer opnieuw**.
 - Elk gesprek wordt server-side opgeslagen als JSON in `data/chats/` (staat in `.gitignore`, blijft dus lokaal en privé).
 - Via **"Exporteer trainingsdata"** onderin de sidebar download je alle gesprekken als JSONL in het gangbare finetune-formaat: één regel per gesprek, `{"messages": [{"role", "content"}, ...]}`. Direct bruikbaar om later een eigen model mee te trainen.
-- Antwoorden streamen live het scherm in, met markdown-weergave.
 
 ## Company & Deal Research Assistant
 
@@ -22,6 +27,9 @@ Bereikbaar via **Deal Research** in de sidebar. Het rapport bevat:
 - **Partnership-fit** — score, ideaal partnerprofiel en concrete samenwerkingskansen
 - **Risico's** — de belangrijkste risico's met ernst-inschatting
 - **Strategische conclusie** — eindoordeel en aanbeveling
+- **Gebruikte bronnen** — de webbronnen waarop de analyse is gebaseerd
+
+Rapporten worden opgeslagen in `data/reports/` en zijn terug te vinden via de sidebar, het dashboard en het command palette. Met **"Chat over dit rapport"** start je een chat met het volledige rapport als context voor vervolgvragen.
 
 ## Hoe het werkt
 

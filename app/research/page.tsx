@@ -1,8 +1,10 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import AppShell from "@/components/AppShell";
-import type { ResearchReport, ThreatLevel } from "@/lib/research";
+import { useRouter, useSearchParams } from "next/navigation";
+import AppShell, { REPORTS_UPDATED_EVENT } from "@/components/AppShell";
+import type { ThreatLevel } from "@/lib/research";
+import type { SavedReport } from "@/lib/reportStore";
 
 const EXAMPLES = ["ASML", "Adyen", "Coolblue", "Tesla", "Bol.com"];
 
@@ -146,7 +148,28 @@ function LoadingState({ company }: { company: string }) {
   );
 }
 
-function Report({ report, onReset }: { report: ResearchReport; onReset: () => void }) {
+function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void }) {
+  const router = useRouter();
+  const [openingChat, setOpeningChat] = useState(false);
+  const report = saved.report;
+
+  async function chatAboutReport() {
+    if (openingChat) return;
+    setOpeningChat(true);
+    try {
+      const res = await fetch("/api/chats/from-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportId: saved.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      router.push(`/chat?chat=${data.chatId}`);
+    } catch {
+      setOpeningChat(false);
+    }
+  }
+
   const meta = [
     { label: "Sector", value: report.company.industry },
     { label: "Hoofdkantoor", value: report.company.headquarters },
@@ -161,18 +184,32 @@ function Report({ report, onReset }: { report: ResearchReport; onReset: () => vo
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-medium uppercase tracking-widest text-emerald-600/90 dark:text-emerald-400/80">
-              Business-analyse
+              Business-analyse ·{" "}
+              {new Date(saved.createdAt).toLocaleDateString("nl-NL", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
             </p>
             <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold text-slate-900 dark:text-white sm:text-4xl">
               {report.company.name}
             </h1>
           </div>
-          <button
-            onClick={onReset}
-            className="rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:border-emerald-400/50 hover:text-slate-900 dark:hover:text-white"
-          >
-            Nieuwe analyse
-          </button>
+          <div className="flex flex-wrap gap-2.5">
+            <button
+              onClick={chatAboutReport}
+              disabled={openingChat}
+              className="rounded-lg border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
+            >
+              {openingChat ? "Chat openen…" : "💬 Chat over dit rapport"}
+            </button>
+            <button
+              onClick={onReset}
+              className="rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:border-emerald-400/50 hover:text-slate-900 dark:hover:text-white"
+            >
+              Nieuwe analyse
+            </button>
+          </div>
         </div>
         <p className="mt-4 max-w-3xl text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
           {report.company.summary}
@@ -266,6 +303,40 @@ function Report({ report, onReset }: { report: ResearchReport; onReset: () => vo
         <p className="mt-3 text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">{report.conclusion}</p>
       </section>
 
+      {/* Bronnen */}
+      {saved.citations.length > 0 && (
+        <SectionCard kicker="Bronnen" title="Gebruikte bronnen">
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {saved.citations.map((c) => (
+              <li key={c.url}>
+                <a
+                  href={c.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-start gap-2.5 rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] px-4 py-3 transition hover:border-emerald-400/40"
+                >
+                  <span className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-400/70">↗</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200 group-hover:text-emerald-700 dark:group-hover:text-emerald-300">
+                      {c.title}
+                    </span>
+                    <span className="block truncate text-xs text-slate-500 dark:text-slate-500">
+                      {(() => {
+                        try {
+                          return new URL(c.url).hostname.replace(/^www\./, "");
+                        } catch {
+                          return c.url;
+                        }
+                      })()}
+                    </span>
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      )}
+
       <p className="text-center text-xs text-slate-400 dark:text-slate-600">
         Gegenereerd door Claude · AI-analyse ter ondersteuning, geen vervanging van eigen due diligence
       </p>
@@ -274,12 +345,48 @@ function Report({ report, onReset }: { report: ResearchReport; onReset: () => vo
 }
 
 function ResearchView() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const reportId = searchParams.get("report");
+
   const [company, setCompany] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
-  const [report, setReport] = useState<ResearchReport | null>(null);
+  const [saved, setSaved] = useState<SavedReport | null>(null);
   const [error, setError] = useState("");
   const [analyzedCompany, setAnalyzedCompany] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Reset direct tijdens de render wanneer het rapport uit de URL verdwijnt
+  // (bv. via "Nieuwe analyse" of de sidebar).
+  const [prevReportId, setPrevReportId] = useState(reportId);
+  if (prevReportId !== reportId) {
+    setPrevReportId(reportId);
+    if (!reportId) {
+      setSaved(null);
+      if (status !== "loading") setStatus("idle");
+    }
+  }
+
+  // Laad een opgeslagen rapport wanneer er een ?report=… in de URL staat
+  // (via de sidebar of na een refresh).
+  useEffect(() => {
+    if (!reportId) return;
+    if (saved?.id === reportId) return;
+    let cancelled = false;
+    (async () => {
+      const res = await fetch(`/api/reports/${reportId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!cancelled) {
+        setSaved(data.saved);
+        setStatus("done");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportId]);
 
   async function analyze(name: string) {
     const trimmed = name.trim();
@@ -295,8 +402,10 @@ function ResearchView() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Onbekende fout");
-      setReport(data.report);
+      setSaved(data.saved);
       setStatus("done");
+      window.dispatchEvent(new Event(REPORTS_UPDATED_EVENT));
+      router.replace(`/research?report=${data.saved.id}`, { scroll: false });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Er ging iets mis");
       setStatus("error");
@@ -305,16 +414,17 @@ function ResearchView() {
 
   function reset() {
     setStatus("idle");
-    setReport(null);
+    setSaved(null);
     setCompany("");
     setError("");
+    router.replace("/research", { scroll: false });
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 sm:px-8">
-      {status === "done" && report ? (
-        <Report report={report} onReset={reset} />
+      {status === "done" && saved ? (
+        <Report saved={saved} onReset={reset} />
       ) : (
         <div className="flex flex-col items-center pt-20 sm:pt-28">
           <div className="animate-fade-up flex max-w-2xl flex-col items-center text-center">
