@@ -366,6 +366,8 @@ function Sidebar({
   chats,
   reports,
   collapsed,
+  width = DEFAULT_SIDEBAR_WIDTH,
+  resizing = false,
   onToggleCollapse,
   onNavigate,
   onOpenPalette,
@@ -375,6 +377,8 @@ function Sidebar({
   chats: ChatSummary[];
   reports: ReportSummary[];
   collapsed: boolean;
+  width?: number;
+  resizing?: boolean;
   onToggleCollapse?: () => void;
   onNavigate?: () => void;
   onOpenPalette: () => void;
@@ -419,8 +423,9 @@ function Sidebar({
 
   return (
     <aside
-      className={`flex h-full shrink-0 flex-col border-r border-slate-900/10 bg-white transition-[width] duration-200 dark:border-white/10 dark:bg-black/30 ${
-        collapsed ? "w-[64px]" : "w-72"
+      style={{ width: collapsed ? 64 : width }}
+      className={`flex h-full shrink-0 flex-col border-r border-slate-900/10 bg-white dark:border-white/10 dark:bg-black/30 ${
+        resizing ? "" : "transition-[width] duration-200"
       }`}
     >
       <div className={`flex items-center pt-5 ${collapsed ? "justify-center px-0 pb-3" : "justify-between px-4 pb-2"}`}>
@@ -648,6 +653,40 @@ function Sidebar({
 
 /* ---------- Shell ---------- */
 
+// Breedte van de sidebar is met de muis versleepbaar; net als de ingeklapte
+// stand leeft die in localStorage met een custom event voor useSyncExternalStore.
+const DEFAULT_SIDEBAR_WIDTH = 288;
+const MIN_SIDEBAR_WIDTH = 220;
+const MAX_SIDEBAR_WIDTH = 480;
+const SIDEBAR_WIDTH_EVENT = "sidebar-width-changed";
+
+function clampSidebarWidth(px: number) {
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, px));
+}
+
+function subscribeSidebarWidth(onChange: () => void) {
+  window.addEventListener(SIDEBAR_WIDTH_EVENT, onChange);
+  return () => window.removeEventListener(SIDEBAR_WIDTH_EVENT, onChange);
+}
+
+function getSidebarWidth() {
+  try {
+    const stored = Number(localStorage.getItem("sidebar-width"));
+    return stored ? clampSidebarWidth(stored) : DEFAULT_SIDEBAR_WIDTH;
+  } catch {
+    return DEFAULT_SIDEBAR_WIDTH;
+  }
+}
+
+function setSidebarWidth(px: number) {
+  try {
+    localStorage.setItem("sidebar-width", String(Math.round(clampSidebarWidth(px))));
+  } catch {
+    // geen localStorage — slepen heeft dan geen effect, sidebar houdt de standaardbreedte
+  }
+  window.dispatchEvent(new Event(SIDEBAR_WIDTH_EVENT));
+}
+
 // Ingeklapte stand van de sidebar leeft in localStorage, met een custom
 // event zodat useSyncExternalStore wijzigingen direct oppikt.
 const SIDEBAR_EVENT = "sidebar-collapsed-changed";
@@ -668,7 +707,31 @@ function getCollapsed() {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [resizing, setResizing] = useState(false);
   const collapsed = useSyncExternalStore(subscribeCollapsed, getCollapsed, () => false);
+  const sidebarWidth = useSyncExternalStore(
+    subscribeSidebarWidth,
+    getSidebarWidth,
+    () => DEFAULT_SIDEBAR_WIDTH
+  );
+
+  // Sleep de rechterrand van de sidebar om de breedte aan te passen.
+  function startResize(e: React.PointerEvent) {
+    e.preventDefault();
+    setResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (ev: PointerEvent) => setSidebarWidth(ev.clientX);
+    const onUp = () => {
+      setResizing(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [reports, setReports] = useState<ReportSummary[]>([]);
 
@@ -728,16 +791,29 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-dvh w-full overflow-hidden">
       {/* Desktop sidebar */}
-      <div className="hidden md:flex">
+      <div className="relative hidden md:flex">
         <Sidebar
           chats={chats}
           reports={reports}
           collapsed={collapsed}
+          width={sidebarWidth}
+          resizing={resizing}
           onToggleCollapse={toggleCollapse}
           onOpenPalette={() => setPaletteOpen(true)}
           refreshChats={refreshChats}
           refreshReports={refreshReports}
         />
+        {!collapsed && (
+          <div
+            onPointerDown={startResize}
+            onDoubleClick={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
+            title="Sleep om de breedte aan te passen · dubbelklik om te herstellen"
+            aria-hidden
+            className={`absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize transition-colors ${
+              resizing ? "bg-emerald-400/50" : "hover:bg-emerald-400/30"
+            }`}
+          />
+        )}
       </div>
 
       {/* Mobile sidebar overlay */}
