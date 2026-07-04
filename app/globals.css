@@ -145,6 +145,93 @@ body {
   padding: 0;
 }
 
+/* Syntax highlighting (rehype-highlight / highlight.js) — eigen thema
+   passend bij de huisstijl, licht als basis en .dark als override */
+.markdown .hljs-comment,
+.markdown .hljs-quote {
+  color: #64748b;
+  font-style: italic;
+}
+.markdown .hljs-keyword,
+.markdown .hljs-selector-tag,
+.markdown .hljs-tag,
+.markdown .hljs-meta {
+  color: #7c3aed;
+}
+.markdown .hljs-string,
+.markdown .hljs-regexp,
+.markdown .hljs-addition {
+  color: #047857;
+}
+.markdown .hljs-number,
+.markdown .hljs-literal,
+.markdown .hljs-symbol,
+.markdown .hljs-bullet {
+  color: #b45309;
+}
+.markdown .hljs-title,
+.markdown .hljs-section,
+.markdown .hljs-name,
+.markdown .hljs-function {
+  color: #1d4ed8;
+}
+.markdown .hljs-attr,
+.markdown .hljs-attribute,
+.markdown .hljs-variable,
+.markdown .hljs-template-variable,
+.markdown .hljs-type,
+.markdown .hljs-built_in {
+  color: #0e7490;
+}
+.markdown .hljs-deletion {
+  color: #b91c1c;
+}
+.markdown .hljs-emphasis {
+  font-style: italic;
+}
+.markdown .hljs-strong {
+  font-weight: 600;
+}
+
+.dark .markdown .hljs-comment,
+.dark .markdown .hljs-quote {
+  color: #7d8aa0;
+}
+.dark .markdown .hljs-keyword,
+.dark .markdown .hljs-selector-tag,
+.dark .markdown .hljs-tag,
+.dark .markdown .hljs-meta {
+  color: #c4b5fd;
+}
+.dark .markdown .hljs-string,
+.dark .markdown .hljs-regexp,
+.dark .markdown .hljs-addition {
+  color: #6ee7b7;
+}
+.dark .markdown .hljs-number,
+.dark .markdown .hljs-literal,
+.dark .markdown .hljs-symbol,
+.dark .markdown .hljs-bullet {
+  color: #fcd34d;
+}
+.dark .markdown .hljs-title,
+.dark .markdown .hljs-section,
+.dark .markdown .hljs-name,
+.dark .markdown .hljs-function {
+  color: #93c5fd;
+}
+.dark .markdown .hljs-attr,
+.dark .markdown .hljs-attribute,
+.dark .markdown .hljs-variable,
+.dark .markdown .hljs-template-variable,
+.dark .markdown .hljs-type,
+.dark .markdown .hljs-built_in {
+  color: #67e8f9;
+}
+.dark .markdown .hljs-deletion {
+  color: #fca5a5;
+}
+
 .markdown blockquote {
   border-left: 3px solid rgba(16, 185, 129, 0.5);
   padding-left: 1em;
