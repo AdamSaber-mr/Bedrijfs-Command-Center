@@ -5,6 +5,8 @@ import { randomUUID } from "crypto";
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  // Tijdstip van het bericht; ontbreekt bij oudere chats
+  at?: string;
 }
 
 export interface Chat {
@@ -16,6 +18,8 @@ export interface Chat {
   // Optionele achtergrondcontext (bv. een deal-rapport) die als systeemcontext
   // wordt meegestuurd, maar geen deel is van de zichtbare berichten.
   context?: string;
+  // Vastgepinde chats staan bovenaan in de sidebar
+  pinned?: boolean;
 }
 
 export interface ChatSummary {
@@ -23,6 +27,7 @@ export interface ChatSummary {
   title: string;
   updatedAt: string;
   messageCount: number;
+  pinned: boolean;
 }
 
 // Chats worden als losse JSON-bestanden bewaard zodat ze later 1-op-1
@@ -55,6 +60,7 @@ export async function listChats(): Promise<ChatSummary[]> {
             title: chat.title,
             updatedAt: chat.updatedAt,
             messageCount: chat.messages.length,
+            pinned: chat.pinned === true,
           };
         } catch {
           return null;
@@ -89,6 +95,24 @@ export async function saveChat(chat: Chat): Promise<void> {
   await ensureDir();
   chat.updatedAt = new Date().toISOString();
   await fs.writeFile(fileFor(chat.id), JSON.stringify(chat, null, 2), "utf-8");
+}
+
+// Titel of pin-status aanpassen zónder updatedAt te verhogen, zodat de chat
+// niet onbedoeld naar boven springt in de datumgroepen.
+export async function updateChatMeta(
+  id: string,
+  patch: { title?: string; pinned?: boolean }
+): Promise<Chat | null> {
+  const chat = await getChat(id);
+  if (!chat) return null;
+  if (typeof patch.title === "string" && patch.title.trim()) {
+    chat.title = patch.title.trim().slice(0, 80);
+  }
+  if (typeof patch.pinned === "boolean") {
+    chat.pinned = patch.pinned;
+  }
+  await fs.writeFile(fileFor(chat.id), JSON.stringify(chat, null, 2), "utf-8");
+  return chat;
 }
 
 export async function deleteChat(id: string): Promise<void> {
