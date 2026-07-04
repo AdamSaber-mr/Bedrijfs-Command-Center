@@ -135,7 +135,7 @@ function applyThemeMode(mode: ThemeMode) {
   window.dispatchEvent(new Event(THEME_MODE_EVENT));
 }
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const mode = useSyncExternalStore(subscribeThemeMode, getThemeMode, () => "system");
 
   return (
@@ -242,7 +242,7 @@ function CommandPalette({
       { id: "dashboard", group: "Acties", label: "Dashboard", icon: ICONS.dashboard, run: go("/") },
       { id: "research", group: "Acties", label: "Deal Research", icon: ICONS.research, run: go("/research") },
       { id: "notes", group: "Acties", label: "Notities", icon: ICONS.note, run: go("/notes") },
-      { id: "archive", group: "Acties", label: "Archief", icon: ICONS.archive, run: go("/archief") },
+      { id: "archive", group: "Acties", label: "Archief", icon: ICONS.archive, run: go("/settings?tab=archief") },
       { id: "settings", group: "Acties", label: "Instellingen", icon: ICONS.settings, run: go("/settings") },
       {
         id: "theme",
@@ -705,14 +705,6 @@ function Sidebar({
           icon={ICONS.note}
           label="Notities"
           active={pathname === "/notes"}
-          collapsed={collapsed}
-          onNavigate={onNavigate}
-        />
-        <NavLink
-          href="/archief"
-          icon={ICONS.archive}
-          label="Archief"
-          active={pathname === "/archief"}
           collapsed={collapsed}
           onNavigate={onNavigate}
         />

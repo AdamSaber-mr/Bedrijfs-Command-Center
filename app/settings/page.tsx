@@ -1,7 +1,9 @@
 "use client";
 
 import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
-import AppShell, { CHATS_UPDATED_EVENT } from "@/components/AppShell";
+import { useRouter, useSearchParams } from "next/navigation";
+import AppShell, { CHATS_UPDATED_EVENT, ThemeToggle } from "@/components/AppShell";
+import ArchivePanel from "@/components/ArchivePanel";
 import {
   DEFAULT_SETTINGS,
   MAX_TOKENS_OPTIONS,
@@ -9,8 +11,8 @@ import {
   type Settings,
 } from "@/lib/settingsShared";
 
-// Accentkleur is puur visueel en leeft client-side (localStorage + data-attribuut
-// op <html>), net als het thema.
+/* ---------- Accentkleur (client-side, net als het thema) ---------- */
+
 const ACCENTS = [
   { id: "emerald", label: "Smaragd", color: "#10b981" },
   { id: "sky", label: "Blauw", color: "#0ea5e9" },
@@ -44,74 +46,116 @@ function setAccent(id: string) {
   window.dispatchEvent(new Event(ACCENT_EVENT));
 }
 
-function Section({
+/* ---------- Bouwstenen (Claude-achtige rijen) ---------- */
+
+const TABS = [
+  { id: "profiel", label: "Profiel" },
+  { id: "weergave", label: "Weergave" },
+  { id: "model", label: "Model" },
+  { id: "data", label: "Data" },
+  { id: "archief", label: "Archief" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
+
+// Eén instelling per rij: label + uitleg links, control rechts (of eronder).
+function Row({
   title,
   description,
   children,
+  stacked = false,
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
+  stacked?: boolean;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6">
-      <h2 className="font-[family-name:var(--font-display)] text-lg font-semibold text-slate-900 dark:text-slate-100">
-        {title}
-      </h2>
-      {description && (
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{description}</p>
-      )}
-      <div className="mt-5">{children}</div>
-    </section>
+    <div
+      className={`px-5 py-4 ${
+        stacked ? "space-y-3" : "flex flex-wrap items-center justify-between gap-x-6 gap-y-3"
+      }`}
+    >
+      <div className={stacked ? "" : "min-w-0 max-w-md"}>
+        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{title}</p>
+        {description && (
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            {description}
+          </p>
+        )}
+      </div>
+      <div className={stacked ? "" : "shrink-0"}>{children}</div>
+    </div>
   );
 }
 
-function RadioCard({
-  checked,
-  onSelect,
-  label,
-  description,
+// Groep rijen in één kaart met scheidingslijnen, zoals Claude's instellingen.
+function Group({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="divide-y divide-slate-900/[0.07] rounded-2xl border border-slate-900/10 bg-white dark:divide-white/[0.07] dark:border-white/10 dark:bg-white/[0.03]">
+      {children}
+    </div>
+  );
+}
+
+function Segmented<T extends string | number>({
+  options,
+  value,
+  onChange,
 }: {
-  checked: boolean;
-  onSelect: () => void;
-  label: string;
-  description: string;
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
 }) {
   return (
+    <div className="flex rounded-lg border border-slate-900/10 p-0.5 dark:border-white/10">
+      {options.map((option) => (
+        <button
+          key={String(option.value)}
+          onClick={() => onChange(option.value)}
+          aria-pressed={value === option.value}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            value === option.value
+              ? "bg-accent-500/15 text-accent-700 dark:text-accent-300"
+              : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Switch({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
     <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={checked}
-      className={`w-full rounded-xl border px-4 py-3 text-left transition ${
-        checked
-          ? "border-accent-500/60 bg-accent-500/10"
-          : "border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] hover:border-accent-400/40"
+      onClick={onToggle}
+      role="switch"
+      aria-checked={on}
+      className={`flex h-6 w-11 items-center rounded-full p-0.5 transition ${
+        on ? "justify-end bg-accent-500" : "justify-start bg-slate-400/40 dark:bg-white/15"
       }`}
     >
-      <span className="flex items-center gap-2.5">
-        <span
-          className={`h-3.5 w-3.5 shrink-0 rounded-full border-2 ${
-            checked
-              ? "border-accent-500 bg-accent-500"
-              : "border-slate-400 dark:border-slate-500"
-          }`}
-        />
-        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
-      </span>
-      <span className="mt-1 block pl-6 text-xs text-slate-500 dark:text-slate-400">
-        {description}
-      </span>
+      <span className="h-5 w-5 rounded-full bg-white shadow" />
     </button>
   );
 }
 
+/* ---------- Pagina ---------- */
+
 function SettingsView() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tab: TabId = TABS.some((t) => t.id === tabParam) ? (tabParam as TabId) : "profiel";
+
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [apiKeyConfigured, setApiKeyConfigured] = useState<boolean | null>(null);
   const [chatCount, setChatCount] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleteMessage, setDeleteMessage] = useState("");
+  const [dataMessage, setDataMessage] = useState("");
   const accent = useSyncExternalStore(subscribeAccent, getAccent, () => "emerald");
 
   useEffect(() => {
@@ -150,250 +194,286 @@ function SettingsView() {
     setChatCount(0);
     setConfirmDelete(false);
     window.dispatchEvent(new Event(CHATS_UPDATED_EVENT));
-    setDeleteMessage(`${data.deleted} ${data.deleted === 1 ? "chat" : "chats"} verwijderd.`);
-    setTimeout(() => setDeleteMessage(""), 4000);
+    setDataMessage(`${data.deleted} ${data.deleted === 1 ? "chat" : "chats"} verwijderd.`);
+    setTimeout(() => setDataMessage(""), 4000);
+  }
+
+  async function importBackup(file: File) {
+    try {
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: await file.text(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const c = data.imported;
+      setDataMessage(
+        `Geïmporteerd: ${c.chats} chats, ${c.reports} rapporten, ${c.notes} notities, ${c.prompts} sjablonen.`
+      );
+      window.dispatchEvent(new Event(CHATS_UPDATED_EVENT));
+      const chatsRes = await fetch("/api/chats");
+      setChatCount((await chatsRes.json()).chats?.length ?? 0);
+    } catch (err) {
+      setDataMessage(err instanceof Error ? err.message : "Import mislukt");
+    }
+    setTimeout(() => setDataMessage(""), 6000);
   }
 
   return (
-    <main className="stagger-children mx-auto max-w-3xl space-y-6 px-4 py-10 sm:px-8">
-      <header className="flex items-baseline justify-between gap-4">
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl">
-            Instellingen
-          </h1>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Wijzigingen worden direct opgeslagen en gelden voor alle nieuwe berichten.
-          </p>
-        </div>
+    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8">
+      <header className="animate-fade-up flex items-baseline justify-between gap-4">
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl">
+          Instellingen
+        </h1>
         <span
           aria-live="polite"
-          className={`shrink-0 text-xs font-medium text-accent-600 dark:text-accent-400 transition-opacity ${saved ? "opacity-100" : "opacity-0"}`}
+          className={`shrink-0 text-xs font-medium text-accent-600 transition-opacity dark:text-accent-400 ${
+            saved ? "opacity-100" : "opacity-0"
+          }`}
         >
           ✓ Opgeslagen
         </span>
       </header>
 
-      <Section
-        title="Profiel"
-        description="Je naam wordt gebruikt in de begroeting en in de systeemprompt van de assistent."
-      >
-        <input
-          value={settings.name}
-          onChange={(e) => setSettings((s) => ({ ...s, name: e.target.value.slice(0, 40) }))}
-          onBlur={() => update({ name: settings.name })}
-          placeholder="Je naam"
-          className="w-full max-w-xs rounded-xl border border-slate-900/15 dark:border-white/15 bg-slate-50 dark:bg-white/[0.02] px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-accent-400/50 focus:outline-none"
-        />
-      </Section>
-
-      <Section
-        title="Weergave"
-        description="Kies de accentkleur van de interface. Wordt lokaal in je browser bewaard."
-      >
-        <div className="flex flex-wrap gap-3">
-          {ACCENTS.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => setAccent(a.id)}
-              aria-pressed={accent === a.id}
-              title={a.label}
-              className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm transition ${
-                accent === a.id
-                  ? "border-accent-500/60 bg-accent-500/10 text-slate-900 dark:text-slate-100"
-                  : "border-slate-900/10 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-accent-400/40"
-              }`}
-            >
-              <span
-                className="h-4 w-4 rounded-full"
-                style={{ backgroundColor: a.color }}
-              />
-              {a.label}
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      <Section
-        title="Demo-modus"
-        description="Test de volledige app zonder API-tegoed: chat en Deal Research geven lokaal gegenereerde voorbeeldantwoorden. Zet dit uit zodra je echte antwoorden wilt."
-      >
-        <button
-          onClick={() => update({ demoMode: !settings.demoMode })}
-          aria-pressed={settings.demoMode}
-          className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
-            settings.demoMode
-              ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-              : "border-slate-900/10 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-accent-400/40"
-          }`}
-        >
-          <span
-            className={`flex h-5 w-9 items-center rounded-full p-0.5 transition ${
-              settings.demoMode ? "justify-end bg-amber-500/70" : "justify-start bg-slate-400/40"
-            }`}
-          >
-            <span className="h-4 w-4 rounded-full bg-white shadow" />
-          </span>
-          {settings.demoMode ? "Demo-modus aan — mock-antwoorden" : "Demo-modus uit"}
-        </button>
-      </Section>
-
-      <Section
-        title="AI-model"
-        description="Bepaalt kwaliteit én kosten per bericht. De Deal Research-tool gebruikt altijd Opus voor maximale kwaliteit."
-      >
-        <div className="space-y-2.5">
-          {MODEL_OPTIONS.map((m) => (
-            <RadioCard
-              key={m.id}
-              checked={settings.model === m.id}
-              onSelect={() => update({ model: m.id })}
-              label={m.label}
-              description={m.description}
-            />
-          ))}
-        </div>
-      </Section>
-
-      <Section
-        title="Antwoordlengte"
-        description="Maximale lengte van een antwoord. Korter = goedkoper."
-      >
-        <div className="grid gap-2.5 sm:grid-cols-3">
-          {MAX_TOKENS_OPTIONS.map((o) => (
-            <RadioCard
-              key={o.value}
-              checked={settings.maxTokens === o.value}
-              onSelect={() => update({ maxTokens: o.value })}
-              label={o.label}
-              description={o.description}
-            />
-          ))}
-        </div>
-      </Section>
-
-      <Section
-        title="Eigen instructies"
-        description="Wordt bij elk chatbericht aan de AI meegegeven — bijvoorbeeld je rol, schrijfstijl of vaste context. Max 2000 tekens."
-      >
-        <textarea
-          value={settings.customInstructions}
-          onChange={(e) =>
-            setSettings((s) => ({ ...s, customInstructions: e.target.value.slice(0, 2000) }))
-          }
-          onBlur={() => update({ customInstructions: settings.customInstructions })}
-          placeholder={"Bijv.: Ik ben student en bouw aan een portfolio van AI-projecten. Antwoord praktisch, met concrete voorbeelden."}
-          rows={4}
-          className="w-full resize-y rounded-xl border border-slate-900/15 dark:border-white/15 bg-slate-50 dark:bg-white/[0.02] px-4 py-3 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-accent-400/50 focus:outline-none"
-        />
-        <p className="mt-1.5 text-right text-xs text-slate-400 dark:text-slate-600">
-          {settings.customInstructions.length}/2000
-        </p>
-      </Section>
-
-      <Section
-        title="API-verbinding"
-        description="De Anthropic API-sleutel staat lokaal in .env.local en is hier bewust niet zichtbaar of aanpasbaar."
-      >
-        <div className="flex items-center gap-2.5 text-sm">
-          <span
-            className={`h-2.5 w-2.5 rounded-full ${
-              apiKeyConfigured === null
-                ? "bg-slate-400"
-                : apiKeyConfigured
-                  ? "bg-accent-500"
-                  : "bg-red-500"
-            }`}
-          />
-          <span className="text-slate-700 dark:text-slate-300">
-            {apiKeyConfigured === null
-              ? "Controleren…"
-              : apiKeyConfigured
-                ? "API-sleutel geconfigureerd"
-                : "Geen API-sleutel gevonden — voeg ANTHROPIC_API_KEY toe aan .env.local"}
-          </span>
-        </div>
-      </Section>
-
-      <Section
-        title="Data & trainingsdata"
-        description="Chats worden lokaal opgeslagen in data/chats/ en blijven privé (staat in .gitignore)."
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <a
-            href="/api/export"
-            className="rounded-xl border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 px-4 py-2.5 text-sm font-medium text-accent-700 dark:text-accent-300 transition hover:bg-accent-500/20"
-          >
-            ⇩ Exporteer als JSONL
-          </a>
+      {/* Tabbladen */}
+      <nav className="animate-fade-up mt-6 flex gap-1 overflow-x-auto border-b border-slate-900/10 dark:border-white/10">
+        {TABS.map((t) => (
           <button
-            onClick={deleteAllChats}
-            onMouseLeave={() => setConfirmDelete(false)}
-            className={`rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
-              confirmDelete
-                ? "border-red-500 bg-red-500/15 text-red-600 dark:text-red-300"
-                : "border-red-600/30 dark:border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-300 hover:bg-red-500/10"
+            key={t.id}
+            onClick={() => router.replace(`/settings?tab=${t.id}`, { scroll: false })}
+            aria-current={tab === t.id ? "page" : undefined}
+            className={`relative shrink-0 px-3.5 pb-2.5 pt-1.5 text-sm font-medium transition ${
+              tab === t.id
+                ? "text-slate-900 dark:text-white"
+                : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
             }`}
           >
-            {confirmDelete ? "Klik nogmaals om definitief te wissen" : "Alle chats verwijderen"}
+            {t.label}
+            {tab === t.id && (
+              <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent-500" />
+            )}
           </button>
-          <span className="text-xs text-slate-500">
-            {chatCount === null ? "…" : `${chatCount} ${chatCount === 1 ? "chat" : "chats"} opgeslagen`}
-          </span>
-        </div>
-        {deleteMessage && (
-          <p
-            aria-live="polite"
-            className="mt-3 rounded-xl border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 px-4 py-2.5 text-sm text-accent-700 dark:text-accent-300"
-          >
-            ✓ {deleteMessage}
-          </p>
-        )}
-        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-900/10 pt-4 dark:border-white/10">
-          <a
-            href="/api/backup"
-            className="rounded-xl border border-slate-900/15 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-accent-400/50 dark:border-white/15 dark:text-slate-300"
-          >
-            ⇩ Volledige back-up (JSON)
-          </a>
-          <label className="cursor-pointer rounded-xl border border-slate-900/15 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-accent-400/50 dark:border-white/15 dark:text-slate-300">
-            ⇧ Importeer back-up…
-            <input
-              type="file"
-              accept="application/json"
-              className="hidden"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (!file) return;
-                try {
-                  const res = await fetch("/api/backup", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: await file.text(),
-                  });
-                  const data = await res.json();
-                  if (!res.ok) throw new Error(data.error);
-                  const c = data.imported;
-                  setDeleteMessage(
-                    `Geïmporteerd: ${c.chats} chats, ${c.reports} rapporten, ${c.notes} notities, ${c.prompts} sjablonen.`
-                  );
-                  window.dispatchEvent(new Event(CHATS_UPDATED_EVENT));
-                  const chatsRes = await fetch("/api/chats");
-                  setChatCount((await chatsRes.json()).chats?.length ?? 0);
-                } catch (err) {
-                  setDeleteMessage(
-                    err instanceof Error ? err.message : "Import mislukt"
-                  );
+        ))}
+      </nav>
+
+      <div key={tab} className="animate-fade-up mt-6 space-y-6" style={{ animationDuration: "0.3s" }}>
+        {tab === "profiel" && (
+          <Group>
+            <Row
+              title="Naam"
+              description="Wordt gebruikt in de begroeting en in de systeemprompt van de assistent."
+            >
+              <input
+                value={settings.name}
+                onChange={(e) => setSettings((s) => ({ ...s, name: e.target.value.slice(0, 40) }))}
+                onBlur={() => update({ name: settings.name })}
+                placeholder="Je naam"
+                className="w-56 rounded-xl border border-slate-900/15 bg-slate-50 px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent-400/50 focus:outline-none dark:border-white/15 dark:bg-white/[0.02] dark:text-slate-100 dark:placeholder:text-slate-500"
+              />
+            </Row>
+            <Row
+              title="Eigen instructies"
+              description="Wordt bij elk chatbericht aan de AI meegegeven — bijvoorbeeld je rol, schrijfstijl of vaste context. Max 2000 tekens."
+              stacked
+            >
+              <textarea
+                value={settings.customInstructions}
+                onChange={(e) =>
+                  setSettings((s) => ({ ...s, customInstructions: e.target.value.slice(0, 2000) }))
                 }
-                setTimeout(() => setDeleteMessage(""), 6000);
-              }}
-            />
-          </label>
-          <span className="text-xs text-slate-500">
-            Back-up bevat chats, rapporten, notities, sjablonen en instellingen
-          </span>
-        </div>
-      </Section>
+                onBlur={() => update({ customInstructions: settings.customInstructions })}
+                placeholder="Bijv.: Ik ben student en bouw aan een portfolio van AI-projecten. Antwoord praktisch, met concrete voorbeelden."
+                rows={4}
+                className="w-full resize-y rounded-xl border border-slate-900/15 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent-400/50 focus:outline-none dark:border-white/15 dark:bg-white/[0.02] dark:text-slate-100 dark:placeholder:text-slate-500"
+              />
+              <p className="text-right text-xs text-slate-400 dark:text-slate-600">
+                {settings.customInstructions.length}/2000
+              </p>
+            </Row>
+          </Group>
+        )}
+
+        {tab === "weergave" && (
+          <Group>
+            <Row title="Thema" description="Licht, donker of automatisch meebewegen met je systeem.">
+              <ThemeToggle />
+            </Row>
+            <Row title="Accentkleur" description="De kleur van knoppen, links en accenten. Wordt lokaal in je browser bewaard.">
+              <div className="flex gap-2">
+                {ACCENTS.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => setAccent(a.id)}
+                    aria-pressed={accent === a.id}
+                    title={a.label}
+                    aria-label={a.label}
+                    className={`flex h-8 w-8 items-center justify-center rounded-full transition active:scale-90 ${
+                      accent === a.id
+                        ? "ring-2 ring-slate-900/40 ring-offset-2 ring-offset-white dark:ring-white/60 dark:ring-offset-[#0d1526]"
+                        : "hover:scale-110"
+                    }`}
+                    style={{ backgroundColor: a.color }}
+                  >
+                    {accent === a.id && <span className="text-xs font-bold text-white">✓</span>}
+                  </button>
+                ))}
+              </div>
+            </Row>
+          </Group>
+        )}
+
+        {tab === "model" && (
+          <>
+            <Group>
+              <Row
+                title="AI-model"
+                description="Bepaalt kwaliteit én kosten per bericht. Deal Research gebruikt altijd Opus."
+                stacked
+              >
+                <div className="space-y-2">
+                  {MODEL_OPTIONS.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => update({ model: m.id })}
+                      aria-pressed={settings.model === m.id}
+                      className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                        settings.model === m.id
+                          ? "border-accent-500/60 bg-accent-500/10"
+                          : "border-slate-900/10 bg-slate-50 hover:border-accent-400/40 dark:border-white/10 dark:bg-white/[0.02]"
+                      }`}
+                    >
+                      <span
+                        className={`h-3.5 w-3.5 shrink-0 rounded-full border-2 ${
+                          settings.model === m.id
+                            ? "border-accent-500 bg-accent-500"
+                            : "border-slate-400 dark:border-slate-500"
+                        }`}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {m.label}
+                        </span>
+                        <span className="block text-xs text-slate-500 dark:text-slate-400">
+                          {m.description}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Row>
+              <Row title="Antwoordlengte" description="Maximale lengte van een antwoord. Korter = goedkoper.">
+                <Segmented
+                  options={MAX_TOKENS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  value={settings.maxTokens}
+                  onChange={(value) => update({ maxTokens: value })}
+                />
+              </Row>
+            </Group>
+            <Group>
+              <Row
+                title="Demo-modus"
+                description="Test de volledige app zonder API-tegoed: chat en Deal Research geven lokaal gegenereerde voorbeeldantwoorden."
+              >
+                <Switch on={settings.demoMode} onToggle={() => update({ demoMode: !settings.demoMode })} />
+              </Row>
+              <Row
+                title="API-verbinding"
+                description="De Anthropic API-sleutel staat lokaal in .env.local en is hier bewust niet zichtbaar."
+              >
+                <span className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      apiKeyConfigured === null
+                        ? "bg-slate-400"
+                        : apiKeyConfigured
+                          ? "bg-accent-500"
+                          : "bg-red-500"
+                    }`}
+                  />
+                  {apiKeyConfigured === null
+                    ? "Controleren…"
+                    : apiKeyConfigured
+                      ? "Geconfigureerd"
+                      : "Geen sleutel gevonden"}
+                </span>
+              </Row>
+            </Group>
+          </>
+        )}
+
+        {tab === "data" && (
+          <>
+            <Group>
+              <Row
+                title="Trainingsdata exporteren"
+                description={`Alle gesprekken als JSONL in het gangbare finetune-formaat. ${chatCount === null ? "" : `Nu ${chatCount} ${chatCount === 1 ? "chat" : "chats"} opgeslagen.`}`}
+              >
+                <a
+                  href="/api/export"
+                  className="rounded-xl border border-accent-600/30 bg-accent-500/10 px-4 py-2 text-sm font-medium text-accent-700 transition hover:bg-accent-500/20 dark:border-accent-500/30 dark:text-accent-300"
+                >
+                  ⇩ JSONL
+                </a>
+              </Row>
+              <Row
+                title="Volledige back-up"
+                description="Chats, rapporten, notities, sjablonen en instellingen als één JSON-bestand — en weer te importeren."
+              >
+                <div className="flex gap-2">
+                  <a
+                    href="/api/backup"
+                    className="rounded-xl border border-slate-900/15 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-accent-400/50 dark:border-white/15 dark:text-slate-300"
+                  >
+                    ⇩ Download
+                  </a>
+                  <label className="cursor-pointer rounded-xl border border-slate-900/15 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-accent-400/50 dark:border-white/15 dark:text-slate-300">
+                    ⇧ Importeer…
+                    <input
+                      type="file"
+                      accept="application/json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) importBackup(file);
+                      }}
+                    />
+                  </label>
+                </div>
+              </Row>
+            </Group>
+            <Group>
+              <Row
+                title="Alle chats verwijderen"
+                description="Verwijdert alle opgeslagen gesprekken definitief. Rapporten en notities blijven staan."
+              >
+                <button
+                  onClick={deleteAllChats}
+                  onMouseLeave={() => setConfirmDelete(false)}
+                  className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
+                    confirmDelete
+                      ? "border-red-500 bg-red-500/15 text-red-600 dark:text-red-300"
+                      : "border-red-600/30 bg-red-500/5 text-red-700 hover:bg-red-500/10 dark:border-red-500/30 dark:text-red-300"
+                  }`}
+                >
+                  {confirmDelete ? "Klik nogmaals om te wissen" : "Verwijderen"}
+                </button>
+              </Row>
+            </Group>
+            {dataMessage && (
+              <p
+                aria-live="polite"
+                className="animate-fade-in rounded-xl border border-accent-600/30 bg-accent-500/10 px-4 py-2.5 text-sm text-accent-700 dark:border-accent-500/30 dark:text-accent-300"
+              >
+                ✓ {dataMessage}
+              </p>
+            )}
+          </>
+        )}
+
+        {tab === "archief" && <ArchivePanel />}
+      </div>
     </main>
   );
 }
