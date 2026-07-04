@@ -390,7 +390,6 @@ function Sidebar({
   const searchParams = useSearchParams();
   const activeChatId = searchParams.get("chat");
   const activeReportId = searchParams.get("report");
-  const [search, setSearch] = useState("");
 
   async function removeChat(id: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -408,13 +407,9 @@ function Sidebar({
     refreshReports();
   }
 
-  const filteredChats = search.trim()
-    ? chats.filter((c) => c.title.toLowerCase().includes(search.trim().toLowerCase()))
-    : chats;
-
   // Groepeer op dag voor het bekende sidebar-gevoel
   const groups: { label: string; items: ChatSummary[] }[] = [];
-  for (const chat of filteredChats) {
+  for (const chat of chats) {
     const label = relativeDay(chat.updatedAt);
     const group = groups.find((g) => g.label === label);
     if (group) group.items.push(chat);
@@ -536,12 +531,7 @@ function Sidebar({
             )}
 
             {/* Chats */}
-            {search.trim() && filteredChats.length === 0 && (
-              <p className="px-3 py-4 text-xs text-slate-400 dark:text-slate-600">
-                Geen chats gevonden voor “{search.trim()}”.
-              </p>
-            )}
-            {!search.trim() && groups.length === 0 && (
+            {groups.length === 0 && (
               <p className="px-3 py-6 text-xs text-slate-400 dark:text-slate-600">
                 Nog geen chats. Start hierboven een nieuwe chat — elk gesprek wordt
                 automatisch opgeslagen als trainingsdata.
@@ -580,29 +570,7 @@ function Sidebar({
             ))}
           </nav>
 
-          {/* Zoekveld voor chats */}
-          <div className="border-t border-slate-900/10 px-3 pb-1 pt-2 dark:border-white/10">
-            <div className="flex items-center gap-2 rounded-lg bg-slate-900/[0.04] px-2.5 dark:bg-white/[0.04]">
-              <Icon d={ICONS.search} className="h-3.5 w-3.5 text-slate-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Filter chats…"
-                className="w-full bg-transparent py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder:text-slate-600"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  aria-label="Wis zoekopdracht"
-                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                >
-                  <Icon d={ICONS.close} className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2 p-3">
+          <div className="space-y-2 border-t border-slate-900/10 p-3 dark:border-white/10">
             <ThemeToggle />
             <a
               href="/api/export"
