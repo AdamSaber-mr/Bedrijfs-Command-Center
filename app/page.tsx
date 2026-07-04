@@ -32,7 +32,7 @@ function DashboardView() {
   const [chats, setChats] = useState<ChatSummary[] | null>(null);
   const [reports, setReports] = useState<ReportSummary[] | null>(null);
   const [question, setQuestion] = useState("");
-  const greeting = useGreeting();
+  const { greeting, tagline } = useGreeting();
 
   useEffect(() => {
     (async () => {
@@ -71,7 +71,14 @@ function DashboardView() {
         >
           {greeting}
         </h1>
-        <form onSubmit={ask} className="animate-fade-up mt-8 w-full max-w-2xl" style={{ animationDelay: "0.06s" }}>
+        <p
+          key={tagline}
+          className="animate-fade-up mt-2 min-h-[24px] text-[15px] text-slate-500 dark:text-slate-400"
+          style={{ animationDelay: "0.05s" }}
+        >
+          {tagline}
+        </p>
+        <form onSubmit={ask} className="animate-fade-up mt-7 w-full max-w-2xl" style={{ animationDelay: "0.06s" }}>
           <div className="flex gap-2 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] p-2.5 focus-within:border-accent-400/50">
             <input
               value={question}

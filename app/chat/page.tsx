@@ -238,7 +238,7 @@ function ChatView() {
   }, [initialQuestion, chatId]);
 
   const empty = messages.length === 0;
-  const greeting = useGreeting();
+  const { greeting, tagline } = useGreeting();
 
   const composer = (
     <form
@@ -305,7 +305,14 @@ function ChatView() {
         >
           {greeting}
         </h1>
-        <div className="mt-8 w-full">{composer}</div>
+        <p
+          key={tagline}
+          className="animate-fade-up mt-2 min-h-[24px] text-center text-[15px] text-slate-500 dark:text-slate-400"
+          style={{ animationDelay: "0.05s" }}
+        >
+          {tagline}
+        </p>
+        <div className="mt-7 w-full">{composer}</div>
         <div className="mt-5 flex flex-wrap justify-center gap-2">
           {SUGGESTIONS.map((s) => (
             <button

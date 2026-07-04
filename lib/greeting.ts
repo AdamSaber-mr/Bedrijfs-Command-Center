@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-// Wisselende, Claude-achtige begroetingen. Tijdsgebonden varianten wegen
-// dubbel zodat "Goedemiddag, Adam" het vaakst voorbijkomt.
+// De hoofdbegroeting is altijd tijdsgebonden mét naam ("Goedemiddag, Adam");
+// daaronder wisselt een korte, Claude-achtige subtitel.
 function timeGreeting() {
   const hour = new Date().getHours();
   if (hour < 6) return "Goedenacht";
@@ -13,24 +13,26 @@ function timeGreeting() {
 }
 
 export function pickGreeting(name = "Adam"): string {
-  const timed = `${timeGreeting()}, ${name}`;
+  return `${timeGreeting()}, ${name}`;
+}
+
+export function pickTagline(name = "Adam"): string {
   const pool = [
-    timed,
-    timed,
     "Waarmee kan ik je helpen?",
     `Fijn je weer te zien, ${name}`,
     "Waar gaan we vandaag aan werken?",
-    `Wat kan ik voor je doen, ${name}?`,
+    "Wat kan ik voor je doen?",
     "Klaar wanneer jij het bent",
+    "Stel je vraag, ik denk mee",
   ];
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
 // De begroeting wordt pas ná hydration gekozen, zodat de willekeur geen
 // server/client-mismatch veroorzaakt, en gebruikt de naam uit Instellingen.
-// Tot die tijd is de string leeg — reserveer dus hoogte in de UI.
-export function useGreeting(): string {
-  const [greeting, setGreeting] = useState("");
+// Tot die tijd zijn de strings leeg — reserveer dus hoogte in de UI.
+export function useGreeting(): { greeting: string; tagline: string } {
+  const [texts, setTexts] = useState({ greeting: "", tagline: "" });
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -44,11 +46,13 @@ export function useGreeting(): string {
       } catch {
         // instellingen onbereikbaar — val terug op de standaardnaam
       }
-      if (!cancelled) setGreeting(pickGreeting(name));
+      if (!cancelled) {
+        setTexts({ greeting: pickGreeting(name), tagline: pickTagline(name) });
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
-  return greeting;
+  return texts;
 }
