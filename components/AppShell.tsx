@@ -57,7 +57,7 @@ const ICONS = {
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600 shadow-md shadow-emerald-500/25">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600">
         <svg viewBox="0 0 24 24" fill="white" className="h-4.5 w-4.5" aria-hidden>
           <path d="M13 2 4.5 13.5h5L11 22l8.5-11.5h-5L13 2z" />
         </svg>

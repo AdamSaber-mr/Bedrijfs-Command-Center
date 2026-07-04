@@ -228,10 +228,7 @@ function ChatView() {
       <div className="flex-1 overflow-y-auto">
         {empty ? (
           <div className="animate-fade-up mx-auto flex h-full max-w-2xl flex-col items-center justify-center px-6 text-center">
-            <span className="rounded-full border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium tracking-wide text-emerald-700 dark:text-emerald-300">
-              Aangedreven door Claude
-            </span>
-            <h1 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-bold text-slate-900 dark:text-white sm:text-4xl">
+            <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-slate-900 dark:text-white sm:text-4xl">
               Waarmee kan ik je <span className="text-emerald-600 dark:text-emerald-400">helpen</span>?
             </h1>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-600 dark:text-slate-400">
