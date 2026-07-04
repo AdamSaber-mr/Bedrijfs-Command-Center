@@ -35,10 +35,11 @@ export default function RootLayout({
       className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable} h-full antialiased`}
     >
       <head>
-        {/* Zet het thema vóór de eerste render om flikkeren te voorkomen; donker is de default */}
+        {/* Zet thema en accentkleur vóór de eerste render om flikkeren te
+            voorkomen. Zonder opgeslagen keuze volgt het thema het systeem. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{if(localStorage.getItem("theme")!=="light"){document.documentElement.classList.add("dark")}}catch(e){document.documentElement.classList.add("dark")}})();`,
+            __html: `(function(){try{var t=localStorage.getItem("theme");if(t==="dark"||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches)){document.documentElement.classList.add("dark")}var a=localStorage.getItem("accent");if(a){document.documentElement.dataset.accent=a}}catch(e){document.documentElement.classList.add("dark")}})();`,
           }}
         />
       </head>

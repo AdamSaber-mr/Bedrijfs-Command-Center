@@ -6,6 +6,59 @@
 :root {
   --background: #f4f6f9;
   --foreground: #0f172a;
+  /* Accentkleur — standaard smaragd; instelbaar via data-accent op <html> */
+  --accent-200: #a7f3d0;
+  --accent-300: #6ee7b7;
+  --accent-400: #34d399;
+  --accent-500: #10b981;
+  --accent-600: #059669;
+  --accent-700: #047857;
+  --accent-800: #065f46;
+  --accent-950: #022c22;
+}
+
+[data-accent="sky"] {
+  --accent-200: #bae6fd;
+  --accent-300: #7dd3fc;
+  --accent-400: #38bdf8;
+  --accent-500: #0ea5e9;
+  --accent-600: #0284c7;
+  --accent-700: #0369a1;
+  --accent-800: #075985;
+  --accent-950: #082f49;
+}
+
+[data-accent="violet"] {
+  --accent-200: #ddd6fe;
+  --accent-300: #c4b5fd;
+  --accent-400: #a78bfa;
+  --accent-500: #8b5cf6;
+  --accent-600: #7c3aed;
+  --accent-700: #6d28d9;
+  --accent-800: #5b21b6;
+  --accent-950: #2e1065;
+}
+
+[data-accent="amber"] {
+  --accent-200: #fde68a;
+  --accent-300: #fcd34d;
+  --accent-400: #fbbf24;
+  --accent-500: #f59e0b;
+  --accent-600: #d97706;
+  --accent-700: #b45309;
+  --accent-800: #92400e;
+  --accent-950: #451a03;
+}
+
+[data-accent="rose"] {
+  --accent-200: #fecdd3;
+  --accent-300: #fda4af;
+  --accent-400: #fb7185;
+  --accent-500: #f43f5e;
+  --accent-600: #e11d48;
+  --accent-700: #be123c;
+  --accent-800: #9f1239;
+  --accent-950: #4c0519;
 }
 
 .dark {
@@ -16,6 +69,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+  --color-accent-800: var(--accent-800);
+  --color-accent-950: var(--accent-950);
   --font-sans: var(--font-body);
   --font-display: var(--font-display);
   --font-mono: var(--font-mono);
@@ -28,7 +89,7 @@ body {
 }
 
 ::selection {
-  background: rgba(16, 185, 129, 0.35);
+  background: color-mix(in srgb, var(--accent-500) 35%, transparent);
 }
 
 @keyframes fade-up {
@@ -99,12 +160,12 @@ body {
 .dark .markdown strong { color: #f1f5f9; }
 
 .markdown a {
-  color: #059669;
+  color: var(--accent-600);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.dark .markdown a { color: #34d399; }
+.dark .markdown a { color: var(--accent-400); }
 
 .markdown code {
   font-family: var(--font-mono), monospace;
@@ -224,7 +285,7 @@ body {
 }
 
 .markdown blockquote {
-  border-left: 3px solid rgba(16, 185, 129, 0.5);
+  border-left: 3px solid color-mix(in srgb, var(--accent-500) 50%, transparent);
   padding-left: 1em;
   color: #475569;
 }

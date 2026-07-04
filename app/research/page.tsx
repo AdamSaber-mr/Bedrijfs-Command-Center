@@ -19,19 +19,19 @@ const LOADING_STEPS = [
 ];
 
 const SEVERITY_STYLES: Record<ThreatLevel, string> = {
-  laag: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-600/30 dark:border-emerald-500/30",
+  laag: "bg-accent-500/10 text-accent-700 dark:text-accent-300 border-accent-600/30 dark:border-accent-500/30",
   middel: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-600/40 dark:border-amber-500/30",
   hoog: "bg-red-500/10 text-red-700 dark:text-red-300 border-red-600/30 dark:border-red-500/30",
 };
 
 function scoreColor(score: number) {
-  if (score >= 70) return "text-emerald-700 dark:text-emerald-300";
+  if (score >= 70) return "text-accent-700 dark:text-accent-300";
   if (score >= 45) return "text-amber-700 dark:text-amber-300";
   return "text-red-700 dark:text-red-300";
 }
 
 function scoreBarColor(score: number) {
-  if (score >= 70) return "bg-emerald-400";
+  if (score >= 70) return "bg-accent-400";
   if (score >= 45) return "bg-amber-400";
   return "bg-red-400";
 }
@@ -84,7 +84,7 @@ function SectionCard({
   return (
     <section className={`rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6 sm:p-8 ${className}`}>
       {kicker && (
-        <p className="mb-1 text-xs font-medium uppercase tracking-widest text-emerald-600/90 dark:text-emerald-400/80">{kicker}</p>
+        <p className="mb-1 text-xs font-medium uppercase tracking-widest text-accent-600/90 dark:text-accent-400/80">{kicker}</p>
       )}
       <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
       <div className="mt-4">{children}</div>
@@ -97,7 +97,7 @@ function BulletList({ items }: { items: string[] }) {
     <ul className="space-y-2.5">
       {items.map((item, i) => (
         <li key={i} className="flex gap-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
-          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600/70 dark:bg-emerald-400/70" />
+          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-accent-600/70 dark:bg-accent-400/70" />
           {item}
         </li>
       ))}
@@ -123,12 +123,12 @@ function LoadingState({ company }: { company: string }) {
 
   return (
     <div className="animate-fade-up mx-auto mt-16 max-w-lg rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-8 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10">
         <div className="flex gap-1.5">
           {[0, 1, 2].map((i) => (
             <span
               key={i}
-              className="animate-pulse-dot h-2 w-2 rounded-full bg-emerald-400"
+              className="animate-pulse-dot h-2 w-2 rounded-full bg-accent-400"
               style={{ animationDelay: `${i * 0.25}s` }}
             />
           ))}
@@ -137,7 +137,7 @@ function LoadingState({ company }: { company: string }) {
       <h2 className="mt-6 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-900 dark:text-slate-100">
         Analyse van {company}
       </h2>
-      <p className="mt-2 text-sm text-emerald-700/90 dark:text-emerald-300/90">{LOADING_STEPS[step]}</p>
+      <p className="mt-2 text-sm text-accent-700/90 dark:text-accent-300/90">{LOADING_STEPS[step]}</p>
       <p className="mt-6 text-xs text-slate-500">
         Claude doorzoekt actuele bronnen en stelt het rapport samen — dit duurt doorgaans 1 à 3 minuten.
         <span className="ml-2 font-[family-name:var(--font-mono)] tabular-nums text-slate-600 dark:text-slate-400">
@@ -180,10 +180,10 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
   return (
     <div className="animate-fade-up mx-auto mt-10 max-w-5xl space-y-6 pb-24">
       {/* Bedrijfskop */}
-      <header className="rounded-2xl border border-slate-900/10 dark:border-white/10 bg-gradient-to-br from-emerald-500/[0.07] to-transparent p-6 sm:p-8">
+      <header className="rounded-2xl border border-slate-900/10 dark:border-white/10 bg-gradient-to-br from-accent-500/[0.07] to-transparent p-6 sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-emerald-600/90 dark:text-emerald-400/80">
+            <p className="text-xs font-medium uppercase tracking-widest text-accent-600/90 dark:text-accent-400/80">
               Business-analyse ·{" "}
               {new Date(saved.createdAt).toLocaleDateString("nl-NL", {
                 day: "numeric",
@@ -199,13 +199,13 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
             <button
               onClick={chatAboutReport}
               disabled={openingChat}
-              className="rounded-lg border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
+              className="rounded-lg border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 px-4 py-2 text-sm font-medium text-accent-700 dark:text-accent-300 transition hover:bg-accent-500/20 disabled:opacity-50"
             >
               {openingChat ? "Chat openen…" : "💬 Chat over dit rapport"}
             </button>
             <button
               onClick={onReset}
-              className="rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:border-emerald-400/50 hover:text-slate-900 dark:hover:text-white"
+              className="rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:border-accent-400/50 hover:text-slate-900 dark:hover:text-white"
             >
               Nieuwe analyse
             </button>
@@ -296,8 +296,8 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
       </SectionCard>
 
       {/* Conclusie */}
-      <section className="rounded-2xl border border-emerald-600/30 dark:border-emerald-500/25 bg-emerald-500/[0.06] p-6 sm:p-8">
-        <p className="mb-1 text-xs font-medium uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+      <section className="rounded-2xl border border-accent-600/30 dark:border-accent-500/25 bg-accent-500/[0.06] p-6 sm:p-8">
+        <p className="mb-1 text-xs font-medium uppercase tracking-widest text-accent-600 dark:text-accent-400">
           Strategische conclusie
         </p>
         <p className="mt-3 text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">{report.conclusion}</p>
@@ -313,11 +313,11 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
                   href={c.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group flex items-start gap-2.5 rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] px-4 py-3 transition hover:border-emerald-400/40"
+                  className="group flex items-start gap-2.5 rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] px-4 py-3 transition hover:border-accent-400/40"
                 >
-                  <span className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-400/70">↗</span>
+                  <span className="mt-0.5 text-xs text-accent-600/80 dark:text-accent-400/70">↗</span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200 group-hover:text-emerald-700 dark:group-hover:text-emerald-300">
+                    <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200 group-hover:text-accent-700 dark:group-hover:text-accent-300">
                       {c.title}
                     </span>
                     <span className="block truncate text-xs text-slate-500 dark:text-slate-500">
@@ -428,13 +428,13 @@ function ResearchView() {
       ) : (
         <div className="flex flex-col items-center pt-20 sm:pt-28">
           <div className="animate-fade-up flex max-w-2xl flex-col items-center text-center">
-            <span className="rounded-full border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium tracking-wide text-emerald-700 dark:text-emerald-300">
+            <span className="rounded-full border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 px-3 py-1 text-xs font-medium tracking-wide text-accent-700 dark:text-accent-300">
               Aangedreven door Claude
             </span>
             <h1 className="mt-6 font-[family-name:var(--font-display)] text-4xl font-bold leading-tight text-slate-900 dark:text-white sm:text-5xl">
               Company &amp; Deal
               <br />
-              <span className="text-emerald-600 dark:text-emerald-400">Research Assistant</span>
+              <span className="text-accent-600 dark:text-accent-400">Research Assistant</span>
             </h1>
             <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-slate-600 dark:text-slate-400">
               Voer een bedrijfsnaam in en ontvang binnen enkele minuten een gestructureerde
@@ -452,7 +452,7 @@ function ResearchView() {
               className="animate-fade-up mt-10 w-full max-w-xl"
               style={{ animationDelay: "0.1s" }}
             >
-              <div className="flex gap-3 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] p-2 shadow-2xl shadow-slate-900/10 dark:shadow-black/40 focus-within:border-emerald-400/50">
+              <div className="flex gap-3 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] p-2 shadow-2xl shadow-slate-900/10 dark:shadow-black/40 focus-within:border-accent-400/50">
                 <input
                   ref={inputRef}
                   value={company}
@@ -464,7 +464,7 @@ function ResearchView() {
                 <button
                   type="submit"
                   disabled={company.trim().length < 2}
-                  className="shrink-0 rounded-xl bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="shrink-0 rounded-xl bg-accent-500 px-6 py-2.5 text-sm font-semibold text-accent-950 transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Analyseer
                 </button>
@@ -480,7 +480,7 @@ function ResearchView() {
                       setCompany(ex);
                       analyze(ex);
                     }}
-                    className="rounded-full border border-slate-900/10 dark:border-white/10 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 transition hover:border-emerald-400/40 hover:text-slate-900 dark:hover:text-white"
+                    className="rounded-full border border-slate-900/10 dark:border-white/10 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 transition hover:border-accent-400/40 hover:text-slate-900 dark:hover:text-white"
                   >
                     {ex}
                   </button>

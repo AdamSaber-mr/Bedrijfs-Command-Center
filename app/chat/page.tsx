@@ -52,7 +52,17 @@ function MessageBubble({
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md border border-emerald-600/30 dark:border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-[15px] leading-relaxed text-slate-900 dark:text-slate-100">
+        <div
+          title={
+            message.at
+              ? new Date(message.at).toLocaleTimeString("nl-NL", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : undefined
+          }
+          className="max-w-[85%] rounded-2xl rounded-br-md border border-accent-600/30 dark:border-accent-500/25 bg-accent-500/10 px-4 py-3 text-[15px] leading-relaxed text-slate-900 dark:text-slate-100"
+        >
           <p className="whitespace-pre-wrap">{message.content}</p>
         </div>
       </div>
@@ -69,7 +79,7 @@ function MessageBubble({
               {[0, 1, 2].map((i) => (
                 <span
                   key={i}
-                  className="animate-pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400"
+                  className="animate-pulse-dot h-1.5 w-1.5 rounded-full bg-accent-400"
                   style={{ animationDelay: `${i * 0.25}s` }}
                 />
               ))}
@@ -77,7 +87,7 @@ function MessageBubble({
           )}
         </div>
         {message.content && !busy && (
-          <div className="mt-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="mt-1.5 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <CopyButton text={message.content} />
             {isLast && (
               <button
@@ -86,6 +96,14 @@ function MessageBubble({
               >
                 ↻ Genereer opnieuw
               </button>
+            )}
+            {message.at && (
+              <span className="px-2 text-[11px] tabular-nums text-slate-400 dark:text-slate-600">
+                {new Date(message.at).toLocaleTimeString("nl-NL", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
             )}
           </div>
         )}
@@ -236,7 +254,7 @@ function ChatView() {
         </p>
       )}
       <div
-        className={`flex items-end gap-2 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] focus-within:border-emerald-400/50 ${
+        className={`flex items-end gap-2 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] focus-within:border-accent-400/50 ${
           empty ? "p-2.5" : "p-2"
         }`}
       >
@@ -269,7 +287,7 @@ function ChatView() {
             type="submit"
             disabled={input.trim().length === 0}
             aria-label="Verstuur"
-            className="shrink-0 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+            className="shrink-0 rounded-xl bg-accent-500 px-4 py-2.5 text-sm font-semibold text-accent-950 transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ↑
           </button>
@@ -293,7 +311,7 @@ function ChatView() {
             <button
               key={s}
               onClick={() => send(s)}
-              className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-emerald-400/40 hover:text-slate-800 dark:hover:text-slate-200"
+              className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-accent-400/40 hover:text-slate-800 dark:hover:text-slate-200"
             >
               {s}
             </button>

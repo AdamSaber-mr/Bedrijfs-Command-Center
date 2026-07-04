@@ -22,7 +22,7 @@ function relativeTime(iso: string) {
 }
 
 function scoreColor(score: number) {
-  if (score >= 70) return "text-emerald-700 dark:text-emerald-300";
+  if (score >= 70) return "text-accent-700 dark:text-accent-300";
   if (score >= 45) return "text-amber-700 dark:text-amber-300";
   return "text-red-700 dark:text-red-300";
 }
@@ -72,7 +72,7 @@ function DashboardView() {
           {greeting}
         </h1>
         <form onSubmit={ask} className="animate-fade-up mt-8 w-full max-w-2xl" style={{ animationDelay: "0.06s" }}>
-          <div className="flex gap-2 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] p-2.5 focus-within:border-emerald-400/50">
+          <div className="flex gap-2 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] p-2.5 focus-within:border-accent-400/50">
             <input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -84,7 +84,7 @@ function DashboardView() {
               type="submit"
               disabled={question.trim().length === 0}
               aria-label="Verstuur"
-              className="shrink-0 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="shrink-0 rounded-xl bg-accent-500 px-4 py-2.5 text-sm font-semibold text-accent-950 transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
               ↑
             </button>
@@ -93,13 +93,13 @@ function DashboardView() {
         <div className="animate-fade-up mt-5 flex flex-wrap justify-center gap-2" style={{ animationDelay: "0.12s" }}>
           <Link
             href="/chat"
-            className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-emerald-400/40 hover:text-slate-800 dark:hover:text-slate-200"
+            className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-accent-400/40 hover:text-slate-800 dark:hover:text-slate-200"
           >
             ＋ Nieuwe chat
           </Link>
           <Link
             href="/research"
-            className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-emerald-400/40 hover:text-slate-800 dark:hover:text-slate-200"
+            className="rounded-full border border-slate-900/10 dark:border-white/10 px-3.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 transition hover:border-accent-400/40 hover:text-slate-800 dark:hover:text-slate-200"
           >
             Deal Research
           </Link>
@@ -122,7 +122,7 @@ function DashboardView() {
             </h2>
             <Link
               href="/chat"
-              className="text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:underline"
+              className="text-xs font-medium text-accent-700 dark:text-accent-300 hover:underline"
             >
               + Nieuwe chat
             </Link>
@@ -137,7 +137,7 @@ function DashboardView() {
               <Link
                 key={chat.id}
                 href={`/chat?chat=${chat.id}`}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 transition hover:border-emerald-400/40"
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 transition hover:border-accent-400/40"
               >
                 <span className="min-w-0 flex-1 truncate text-sm text-slate-800 dark:text-slate-200">
                   {chat.title}
@@ -158,7 +158,7 @@ function DashboardView() {
             </h2>
             <Link
               href="/research"
-              className="text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:underline"
+              className="text-xs font-medium text-accent-700 dark:text-accent-300 hover:underline"
             >
               + Nieuwe analyse
             </Link>
@@ -167,7 +167,7 @@ function DashboardView() {
             {reports !== null && reports.length === 0 && (
               <p className="rounded-xl border border-dashed border-slate-900/15 dark:border-white/15 px-4 py-6 text-center text-sm text-slate-500">
                 Nog geen analyses —{" "}
-                <Link href="/research" className="text-emerald-700 dark:text-emerald-300 hover:underline">
+                <Link href="/research" className="text-accent-700 dark:text-accent-300 hover:underline">
                   start je eerste deal-onderzoek
                 </Link>
                 .
@@ -177,7 +177,7 @@ function DashboardView() {
               <Link
                 key={report.id}
                 href={`/research?report=${report.id}`}
-                className="flex items-center justify-between gap-4 rounded-xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 transition hover:border-emerald-400/40"
+                className="flex items-center justify-between gap-4 rounded-xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3 transition hover:border-accent-400/40"
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-200">

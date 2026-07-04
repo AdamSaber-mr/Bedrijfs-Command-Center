@@ -26,14 +26,29 @@ export function pickGreeting(name = "Adam"): string {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// De begroeting wordt pas ná hydration gekozen (via rAF), zodat de
-// willekeur geen server/client-mismatch veroorzaakt. Tot die tijd is
-// de string leeg — reserveer dus hoogte in de UI.
-export function useGreeting(name = "Adam"): string {
+// De begroeting wordt pas ná hydration gekozen, zodat de willekeur geen
+// server/client-mismatch veroorzaakt, en gebruikt de naam uit Instellingen.
+// Tot die tijd is de string leeg — reserveer dus hoogte in de UI.
+export function useGreeting(): string {
   const [greeting, setGreeting] = useState("");
   useEffect(() => {
-    const id = requestAnimationFrame(() => setGreeting(pickGreeting(name)));
-    return () => cancelAnimationFrame(id);
-  }, [name]);
+    let cancelled = false;
+    (async () => {
+      let name = "Adam";
+      try {
+        const res = await fetch("/api/settings");
+        const data = await res.json();
+        if (typeof data.settings?.name === "string" && data.settings.name.trim()) {
+          name = data.settings.name.trim();
+        }
+      } catch {
+        // instellingen onbereikbaar — val terug op de standaardnaam
+      }
+      if (!cancelled) setGreeting(pickGreeting(name));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return greeting;
 }
