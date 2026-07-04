@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
 import AppShell, { CHATS_UPDATED_EVENT } from "@/components/AppShell";
 import {
   DEFAULT_SETTINGS,
@@ -8,6 +8,41 @@ import {
   MODEL_OPTIONS,
   type Settings,
 } from "@/lib/settingsShared";
+
+// Accentkleur is puur visueel en leeft client-side (localStorage + data-attribuut
+// op <html>), net als het thema.
+const ACCENTS = [
+  { id: "emerald", label: "Smaragd", color: "#10b981" },
+  { id: "sky", label: "Blauw", color: "#0ea5e9" },
+  { id: "violet", label: "Paars", color: "#8b5cf6" },
+  { id: "amber", label: "Amber", color: "#f59e0b" },
+  { id: "rose", label: "Rood", color: "#f43f5e" },
+] as const;
+
+const ACCENT_EVENT = "accent-changed";
+
+function subscribeAccent(onChange: () => void) {
+  window.addEventListener(ACCENT_EVENT, onChange);
+  return () => window.removeEventListener(ACCENT_EVENT, onChange);
+}
+
+function getAccent() {
+  try {
+    return localStorage.getItem("accent") ?? "emerald";
+  } catch {
+    return "emerald";
+  }
+}
+
+function setAccent(id: string) {
+  document.documentElement.dataset.accent = id;
+  try {
+    localStorage.setItem("accent", id);
+  } catch {
+    // geen localStorage — accent geldt alleen deze sessie
+  }
+  window.dispatchEvent(new Event(ACCENT_EVENT));
+}
 
 function Section({
   title,
@@ -49,15 +84,15 @@ function RadioCard({
       aria-pressed={checked}
       className={`w-full rounded-xl border px-4 py-3 text-left transition ${
         checked
-          ? "border-emerald-500/60 bg-emerald-500/10"
-          : "border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] hover:border-emerald-400/40"
+          ? "border-accent-500/60 bg-accent-500/10"
+          : "border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] hover:border-accent-400/40"
       }`}
     >
       <span className="flex items-center gap-2.5">
         <span
           className={`h-3.5 w-3.5 shrink-0 rounded-full border-2 ${
             checked
-              ? "border-emerald-500 bg-emerald-500"
+              ? "border-accent-500 bg-accent-500"
               : "border-slate-400 dark:border-slate-500"
           }`}
         />
@@ -76,6 +111,8 @@ function SettingsView() {
   const [chatCount, setChatCount] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState("");
+  const accent = useSyncExternalStore(subscribeAccent, getAccent, () => "emerald");
 
   useEffect(() => {
     (async () => {
@@ -113,7 +150,8 @@ function SettingsView() {
     setChatCount(0);
     setConfirmDelete(false);
     window.dispatchEvent(new Event(CHATS_UPDATED_EVENT));
-    alert(`${data.deleted} chat(s) verwijderd.`);
+    setDeleteMessage(`${data.deleted} ${data.deleted === 1 ? "chat" : "chats"} verwijderd.`);
+    setTimeout(() => setDeleteMessage(""), 4000);
   }
 
   return (
@@ -129,11 +167,75 @@ function SettingsView() {
         </div>
         <span
           aria-live="polite"
-          className={`shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400 transition-opacity ${saved ? "opacity-100" : "opacity-0"}`}
+          className={`shrink-0 text-xs font-medium text-accent-600 dark:text-accent-400 transition-opacity ${saved ? "opacity-100" : "opacity-0"}`}
         >
           ✓ Opgeslagen
         </span>
       </header>
+
+      <Section
+        title="Profiel"
+        description="Je naam wordt gebruikt in de begroeting en in de systeemprompt van de assistent."
+      >
+        <input
+          value={settings.name}
+          onChange={(e) => setSettings((s) => ({ ...s, name: e.target.value.slice(0, 40) }))}
+          onBlur={() => update({ name: settings.name })}
+          placeholder="Je naam"
+          className="w-full max-w-xs rounded-xl border border-slate-900/15 dark:border-white/15 bg-slate-50 dark:bg-white/[0.02] px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-accent-400/50 focus:outline-none"
+        />
+      </Section>
+
+      <Section
+        title="Weergave"
+        description="Kies de accentkleur van de interface. Wordt lokaal in je browser bewaard."
+      >
+        <div className="flex flex-wrap gap-3">
+          {ACCENTS.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => setAccent(a.id)}
+              aria-pressed={accent === a.id}
+              title={a.label}
+              className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm transition ${
+                accent === a.id
+                  ? "border-accent-500/60 bg-accent-500/10 text-slate-900 dark:text-slate-100"
+                  : "border-slate-900/10 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-accent-400/40"
+              }`}
+            >
+              <span
+                className="h-4 w-4 rounded-full"
+                style={{ backgroundColor: a.color }}
+              />
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </Section>
+
+      <Section
+        title="Demo-modus"
+        description="Test de volledige app zonder API-tegoed: chat en Deal Research geven lokaal gegenereerde voorbeeldantwoorden. Zet dit uit zodra je echte antwoorden wilt."
+      >
+        <button
+          onClick={() => update({ demoMode: !settings.demoMode })}
+          aria-pressed={settings.demoMode}
+          className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
+            settings.demoMode
+              ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+              : "border-slate-900/10 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-accent-400/40"
+          }`}
+        >
+          <span
+            className={`flex h-5 w-9 items-center rounded-full p-0.5 transition ${
+              settings.demoMode ? "justify-end bg-amber-500/70" : "justify-start bg-slate-400/40"
+            }`}
+          >
+            <span className="h-4 w-4 rounded-full bg-white shadow" />
+          </span>
+          {settings.demoMode ? "Demo-modus aan — mock-antwoorden" : "Demo-modus uit"}
+        </button>
+      </Section>
 
       <Section
         title="AI-model"
@@ -181,7 +283,7 @@ function SettingsView() {
           onBlur={() => update({ customInstructions: settings.customInstructions })}
           placeholder={"Bijv.: Ik ben student en bouw aan een portfolio van AI-projecten. Antwoord praktisch, met concrete voorbeelden."}
           rows={4}
-          className="w-full resize-y rounded-xl border border-slate-900/15 dark:border-white/15 bg-slate-50 dark:bg-white/[0.02] px-4 py-3 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-emerald-400/50 focus:outline-none"
+          className="w-full resize-y rounded-xl border border-slate-900/15 dark:border-white/15 bg-slate-50 dark:bg-white/[0.02] px-4 py-3 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-accent-400/50 focus:outline-none"
         />
         <p className="mt-1.5 text-right text-xs text-slate-400 dark:text-slate-600">
           {settings.customInstructions.length}/2000
@@ -198,7 +300,7 @@ function SettingsView() {
               apiKeyConfigured === null
                 ? "bg-slate-400"
                 : apiKeyConfigured
-                  ? "bg-emerald-500"
+                  ? "bg-accent-500"
                   : "bg-red-500"
             }`}
           />
@@ -219,7 +321,7 @@ function SettingsView() {
         <div className="flex flex-wrap items-center gap-3">
           <a
             href="/api/export"
-            className="rounded-xl border border-emerald-600/30 dark:border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-medium text-emerald-700 dark:text-emerald-300 transition hover:bg-emerald-500/20"
+            className="rounded-xl border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 px-4 py-2.5 text-sm font-medium text-accent-700 dark:text-accent-300 transition hover:bg-accent-500/20"
           >
             ⇩ Exporteer als JSONL
           </a>
@@ -238,6 +340,14 @@ function SettingsView() {
             {chatCount === null ? "…" : `${chatCount} ${chatCount === 1 ? "chat" : "chats"} opgeslagen`}
           </span>
         </div>
+        {deleteMessage && (
+          <p
+            aria-live="polite"
+            className="mt-3 rounded-xl border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 px-4 py-2.5 text-sm text-accent-700 dark:text-accent-300"
+          >
+            ✓ {deleteMessage}
+          </p>
+        )}
       </Section>
     </main>
   );

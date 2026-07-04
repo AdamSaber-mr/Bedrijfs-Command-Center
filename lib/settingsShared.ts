@@ -4,6 +4,10 @@ export interface Settings {
   model: string;
   maxTokens: number;
   customInstructions: string;
+  // Naam voor de begroeting en de systeemprompt
+  name: string;
+  // Demo-modus: mock-antwoorden zonder Anthropic-API, om de app te testen
+  demoMode: boolean;
 }
 
 // Toegestane modellen met eerlijke kostenindicatie voor de UI
@@ -35,4 +39,6 @@ export const DEFAULT_SETTINGS: Settings = {
   model: "claude-opus-4-8",
   maxTokens: 4096,
   customInstructions: "",
+  name: "Adam",
+  demoMode: false,
 };

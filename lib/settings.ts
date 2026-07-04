@@ -39,5 +39,10 @@ function sanitize(input: unknown): Settings {
     typeof raw.customInstructions === "string"
       ? raw.customInstructions.slice(0, 2000)
       : DEFAULT_SETTINGS.customInstructions;
-  return { model, maxTokens, customInstructions };
+  const name =
+    typeof raw.name === "string" && raw.name.trim()
+      ? raw.name.trim().slice(0, 40)
+      : DEFAULT_SETTINGS.name;
+  const demoMode = raw.demoMode === true;
+  return { model, maxTokens, customInstructions, name, demoMode };
 }
