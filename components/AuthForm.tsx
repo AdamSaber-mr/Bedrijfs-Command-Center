@@ -14,6 +14,7 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,6 +22,10 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
     e.preventDefault();
     if (loading) return;
     setError("");
+    if (!isLogin && password !== confirm) {
+      setError("De wachtwoorden komen niet overeen.");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/auth/${isLogin ? "login" : "register"}`, {
@@ -115,6 +120,23 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
                 className={inputCls}
               />
             </div>
+            {!isLogin && (
+              <div>
+                <label htmlFor="confirm" className={labelCls}>
+                  Bevestig wachtwoord
+                </label>
+                <input
+                  id="confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="Herhaal je wachtwoord"
+                  required
+                  className={inputCls}
+                />
+              </div>
+            )}
 
             {error && (
               <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">

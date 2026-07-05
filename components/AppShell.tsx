@@ -12,7 +12,11 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ChatSummary } from "@/lib/chatStore";
 import type { ReportSummary } from "@/lib/reportStore";
-import { CHATS_UPDATED_EVENT, REPORTS_UPDATED_EVENT } from "@/lib/events";
+import {
+  ACCOUNT_UPDATED_EVENT,
+  CHATS_UPDATED_EVENT,
+  REPORTS_UPDATED_EVENT,
+} from "@/lib/events";
 import {
   Icon,
   ICONS,
@@ -1132,24 +1136,28 @@ export default function AppShell({
   }, [refreshChats, refreshReports]);
 
   // Naam en e-mail van het ingelogde account voor de account-rij.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/me");
-        const data = await res.json();
-        if (!cancelled && data.user) {
-          setUserName(data.user.name ?? "");
-          setUserEmail(data.user.email ?? "");
-        }
-      } catch {
-        // account-info mag stil falen
+  const refreshAccount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      const data = await res.json();
+      if (data.user) {
+        setUserName(data.user.name ?? "");
+        setUserEmail(data.user.email ?? "");
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    } catch {
+      // account-info mag stil falen
+    }
   }, []);
+
+  useEffect(() => {
+    // Via een timeout-callback zodat de setState buiten de effect-body valt.
+    const timer = setTimeout(refreshAccount, 0);
+    window.addEventListener(ACCOUNT_UPDATED_EVENT, refreshAccount);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener(ACCOUNT_UPDATED_EVENT, refreshAccount);
+    };
+  }, [refreshAccount]);
 
   // Uitloggen: sessie intrekken en terug naar de loginpagina.
   const logout = useCallback(async () => {

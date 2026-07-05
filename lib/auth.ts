@@ -24,9 +24,27 @@ async function writeSessions(sessions: SessionMap): Promise<void> {
   await fs.writeFile(SESSIONS_FILE, JSON.stringify(sessions, null, 2), "utf-8");
 }
 
+function isExpired(createdAt: string): boolean {
+  const ageSeconds = (Date.now() - new Date(createdAt).getTime()) / 1000;
+  return !Number.isFinite(ageSeconds) || ageSeconds > SESSION_TTL_SECONDS;
+}
+
+// Verwijdert verlopen tokens; retourneert of er iets is opgeschoond.
+function prune(sessions: SessionMap): boolean {
+  let changed = false;
+  for (const [token, s] of Object.entries(sessions)) {
+    if (isExpired(s.createdAt)) {
+      delete sessions[token];
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 export async function createSession(userId: string): Promise<string> {
   const token = randomBytes(32).toString("hex");
   const sessions = await readSessions();
+  prune(sessions); // opschonen bij elke nieuwe login
   sessions[token] = { userId, createdAt: new Date().toISOString() };
   await writeSessions(sessions);
   return token;
@@ -38,6 +56,19 @@ export async function destroySession(token: string): Promise<void> {
     delete sessions[token];
     await writeSessions(sessions);
   }
+}
+
+// Alle sessies van een gebruiker intrekken (bij accountverwijdering).
+export async function destroyUserSessions(userId: string): Promise<void> {
+  const sessions = await readSessions();
+  let changed = false;
+  for (const [token, s] of Object.entries(sessions)) {
+    if (s.userId === userId) {
+      delete sessions[token];
+      changed = true;
+    }
+  }
+  if (changed) await writeSessions(sessions);
 }
 
 /* ---------- Cookie-helpers (alleen in Route Handlers / Server Actions) ---------- */
@@ -67,7 +98,9 @@ export async function getCurrentUserId(): Promise<string | null> {
   const token = await getSessionToken();
   if (!token) return null;
   const sessions = await readSessions();
-  return sessions[token]?.userId ?? null;
+  const session = sessions[token];
+  if (!session || isExpired(session.createdAt)) return null;
+  return session.userId;
 }
 
 // Gooit als er geen geldige sessie is; gebruikt door de per-gebruiker stores.
@@ -83,6 +116,11 @@ export async function requireUserId(): Promise<string> {
 export function userRoot(userId: string): string {
   if (!/^[a-zA-Z0-9-]+$/.test(userId)) throw new Error("Ongeldig gebruikers-ID");
   return path.join(process.cwd(), "data", "users", userId);
+}
+
+// Verwijdert de volledige datamap van een gebruiker (bij accountverwijdering).
+export async function deleteUserData(userId: string): Promise<void> {
+  await fs.rm(userRoot(userId), { recursive: true, force: true });
 }
 
 // Verplaatst bestaande (single-user) data eenmalig naar de map van deze gebruiker.

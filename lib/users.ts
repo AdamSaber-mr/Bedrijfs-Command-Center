@@ -22,6 +22,8 @@ export interface PublicUser {
 
 const FILE = path.join(process.cwd(), "data", "users.json");
 
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 async function readAll(): Promise<User[]> {
   try {
     return JSON.parse(await fs.readFile(FILE, "utf-8")) as User[];
@@ -91,4 +93,61 @@ export async function verifyCredentials(
   const known = Buffer.from(user.hash, "hex");
   if (candidate.length !== known.length) return null;
   return timingSafeEqual(candidate, known) ? user : null;
+}
+
+function passwordMatches(user: User, password: string): boolean {
+  const candidate = scryptSync(password, user.salt, 64);
+  const known = Buffer.from(user.hash, "hex");
+  return candidate.length === known.length && timingSafeEqual(candidate, known);
+}
+
+// Naam en/of e-mail bijwerken; controleert e-mailformaat en uniciteit.
+export async function updateUser(
+  id: string,
+  patch: { name?: string; email?: string }
+): Promise<{ user: User | null; error?: string }> {
+  const users = await readAll();
+  const user = users.find((u) => u.id === id);
+  if (!user) return { user: null, error: "Gebruiker niet gevonden" };
+
+  if (typeof patch.email === "string") {
+    const norm = patch.email.trim().toLowerCase();
+    if (!EMAIL_RE.test(norm)) return { user: null, error: "Vul een geldig e-mailadres in." };
+    if (users.some((u) => u.id !== id && u.email === norm)) {
+      return { user: null, error: "Dit e-mailadres is al in gebruik." };
+    }
+    user.email = norm;
+  }
+  if (typeof patch.name === "string" && patch.name.trim()) {
+    user.name = patch.name.trim().slice(0, 60);
+  }
+  await writeAll(users);
+  return { user };
+}
+
+// Wachtwoord wijzigen: verifieert eerst het huidige wachtwoord.
+export async function changePassword(
+  id: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<{ ok: boolean; error?: string }> {
+  const users = await readAll();
+  const user = users.find((u) => u.id === id);
+  if (!user) return { ok: false, error: "Gebruiker niet gevonden" };
+  if (!passwordMatches(user, currentPassword)) {
+    return { ok: false, error: "Je huidige wachtwoord klopt niet." };
+  }
+  if (typeof newPassword !== "string" || newPassword.length < 8) {
+    return { ok: false, error: "Nieuw wachtwoord moet minimaal 8 tekens zijn." };
+  }
+  const { salt, hash } = hashPassword(newPassword);
+  user.salt = salt;
+  user.hash = hash;
+  await writeAll(users);
+  return { ok: true };
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  const users = await readAll();
+  await writeAll(users.filter((u) => u.id !== id));
 }

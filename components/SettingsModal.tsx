@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import ArchivePanel from "@/components/ArchivePanel";
 import { Icon, ICONS, ThemeToggle } from "@/components/ui";
-import { CHATS_UPDATED_EVENT } from "@/lib/events";
+import { ACCOUNT_UPDATED_EVENT, CHATS_UPDATED_EVENT } from "@/lib/events";
 import {
   DEFAULT_SETTINGS,
   MAX_TOKENS_OPTIONS,
@@ -48,10 +48,17 @@ function setAccent(id: string) {
 
 /* ---------- Bouwstenen ---------- */
 
-export type SettingsTab = "profiel" | "weergave" | "model" | "data" | "archief";
+export type SettingsTab =
+  | "profiel"
+  | "account"
+  | "weergave"
+  | "model"
+  | "data"
+  | "archief";
 
 const NAV: { id: SettingsTab; label: string; icon: string }[] = [
   { id: "profiel", label: "Profiel", icon: ICONS.user },
+  { id: "account", label: "Account", icon: ICONS.shield },
   { id: "weergave", label: "Weergave", icon: ICONS.sun },
   { id: "model", label: "Model", icon: ICONS.sparkle },
   { id: "data", label: "Data", icon: ICONS.database },
@@ -161,19 +168,80 @@ export default function SettingsModal({
   const [dataMessage, setDataMessage] = useState("");
   const accent = useSyncExternalStore(subscribeAccent, getAccent, () => "emerald");
 
+  // Account (los van de AI-profielnaam): naam + e-mail van het login-account.
+  const [account, setAccount] = useState<{ name: string; email: string }>({ name: "", email: "" });
+  const [accountError, setAccountError] = useState("");
+  const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
+  const [pwMessage, setPwMessage] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+
   useEffect(() => {
     (async () => {
-      const [settingsRes, chatsRes] = await Promise.all([
+      const [settingsRes, chatsRes, meRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/chats"),
+        fetch("/api/auth/me"),
       ]);
       const settingsData = await settingsRes.json();
       const chatsData = await chatsRes.json();
+      const meData = await meRes.json();
       setSettings(settingsData.settings);
       setApiKeyConfigured(settingsData.apiKeyConfigured);
       setChatCount(chatsData.chats?.length ?? 0);
+      if (meData.user) setAccount({ name: meData.user.name ?? "", email: meData.user.email ?? "" });
     })();
   }, []);
+
+  // Naam of e-mail van het account opslaan.
+  async function saveAccount(patch: { name?: string; email?: string }) {
+    setAccountError("");
+    const res = await fetch("/api/account", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setAccountError(data.error ?? "Bijwerken mislukt");
+      return;
+    }
+    setAccount({ name: data.user.name, email: data.user.email });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    window.dispatchEvent(new Event(ACCOUNT_UPDATED_EVENT));
+  }
+
+  async function changePassword() {
+    setPwError("");
+    setPwMessage("");
+    if (pw.next !== pw.confirm) {
+      setPwError("De nieuwe wachtwoorden komen niet overeen.");
+      return;
+    }
+    const res = await fetch("/api/account/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword: pw.current, newPassword: pw.next }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setPwError(data.error ?? "Wijzigen mislukt");
+      return;
+    }
+    setPw({ current: "", next: "", confirm: "" });
+    setPwMessage("Wachtwoord gewijzigd.");
+    setTimeout(() => setPwMessage(""), 4000);
+  }
+
+  async function deleteAccount() {
+    if (!confirmDeleteAccount) {
+      setConfirmDeleteAccount(true);
+      return;
+    }
+    const res = await fetch("/api/account", { method: "DELETE" });
+    if (res.ok) window.location.assign("/login");
+  }
 
   // Esc sluit de popup.
   useEffect(() => {
@@ -299,8 +367,8 @@ export default function SettingsModal({
             {tab === "profiel" && (
               <Group>
                 <Row
-                  title="Naam"
-                  description="Wordt gebruikt in de begroeting en in de systeemprompt van de assistent."
+                  title="Hoe moet de AI je noemen?"
+                  description="Alleen voor de begroeting en de systeemprompt van de assistent — los van je accountnaam en e-mail (die beheer je onder Account)."
                 >
                   <input
                     value={settings.name}
@@ -335,6 +403,99 @@ export default function SettingsModal({
                   </p>
                 </Row>
               </Group>
+            )}
+
+            {tab === "account" && (
+              <>
+                <Group>
+                  <Row title="Naam" description="Je naam op dit account.">
+                    <input
+                      value={account.name}
+                      onChange={(e) =>
+                        setAccount((a) => ({ ...a, name: e.target.value.slice(0, 60) }))
+                      }
+                      onBlur={() => account.name.trim() && saveAccount({ name: account.name })}
+                      placeholder="Je naam"
+                      className="w-60 rounded-xl border border-slate-900/15 bg-slate-50 px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent-400/50 focus:outline-none dark:border-white/15 dark:bg-white/[0.02] dark:text-slate-100 dark:placeholder:text-slate-500"
+                    />
+                  </Row>
+                  <Row title="E-mailadres" description="Het adres waarmee je inlogt.">
+                    <input
+                      type="email"
+                      value={account.email}
+                      onChange={(e) => setAccount((a) => ({ ...a, email: e.target.value }))}
+                      onBlur={() => account.email.trim() && saveAccount({ email: account.email })}
+                      placeholder="jij@voorbeeld.nl"
+                      className="w-60 rounded-xl border border-slate-900/15 bg-slate-50 px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent-400/50 focus:outline-none dark:border-white/15 dark:bg-white/[0.02] dark:text-slate-100 dark:placeholder:text-slate-500"
+                    />
+                  </Row>
+                </Group>
+                {accountError && (
+                  <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-600 dark:text-red-400">
+                    {accountError}
+                  </p>
+                )}
+
+                <Group>
+                  <Row
+                    title="Wachtwoord wijzigen"
+                    description="Voer je huidige wachtwoord in en kies een nieuw wachtwoord van minimaal 8 tekens."
+                    stacked
+                  >
+                    <div className="space-y-2">
+                      {(
+                        [
+                          { key: "current", placeholder: "Huidig wachtwoord", autoComplete: "current-password" },
+                          { key: "next", placeholder: "Nieuw wachtwoord", autoComplete: "new-password" },
+                          { key: "confirm", placeholder: "Bevestig nieuw wachtwoord", autoComplete: "new-password" },
+                        ] as const
+                      ).map((f) => (
+                        <input
+                          key={f.key}
+                          type="password"
+                          autoComplete={f.autoComplete}
+                          value={pw[f.key]}
+                          onChange={(e) => setPw((p) => ({ ...p, [f.key]: e.target.value }))}
+                          placeholder={f.placeholder}
+                          className="w-full rounded-xl border border-slate-900/15 bg-slate-50 px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-accent-400/50 focus:outline-none dark:border-white/15 dark:bg-white/[0.02] dark:text-slate-100 dark:placeholder:text-slate-500"
+                        />
+                      ))}
+                      {pwError && <p className="text-sm text-red-600 dark:text-red-400">{pwError}</p>}
+                      {pwMessage && (
+                        <p className="text-sm text-accent-600 dark:text-accent-400">✓ {pwMessage}</p>
+                      )}
+                      <div className="flex justify-end">
+                        <button
+                          onClick={changePassword}
+                          disabled={!pw.current || !pw.next || !pw.confirm}
+                          className="rounded-xl border border-accent-600/30 bg-accent-500/10 px-4 py-2 text-sm font-medium text-accent-700 transition enabled:hover:bg-accent-500/20 disabled:opacity-40 dark:border-accent-500/30 dark:text-accent-300"
+                        >
+                          Wachtwoord wijzigen
+                        </button>
+                      </div>
+                    </div>
+                  </Row>
+                </Group>
+
+                <Group>
+                  <Row
+                    title="Account verwijderen"
+                    description="Verwijdert je account én al je data (chats, rapporten, notities, sjablonen) definitief. Dit kan niet ongedaan worden gemaakt."
+                  >
+                    <button
+                      onClick={deleteAccount}
+                      onMouseLeave={() => setConfirmDeleteAccount(false)}
+                      className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
+                        confirmDeleteAccount
+                          ? "border-red-500 bg-red-500/15 text-red-600 dark:text-red-300"
+                          : "border-red-600/30 bg-red-500/5 text-red-700 hover:bg-red-500/10 dark:border-red-500/30 dark:text-red-300"
+                      }`}
+                    >
+                      {confirmDeleteAccount ? "Klik nogmaals om te verwijderen" : "Account verwijderen"}
+                    </button>
+                  </Row>
+                </Group>
+              </>
             )}
 
             {tab === "weergave" && (
