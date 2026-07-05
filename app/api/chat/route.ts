@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getChat, newChat, saveChat } from "@/lib/chatStore";
 import { getSettings } from "@/lib/settings";
+import { MODEL_OPTIONS } from "@/lib/settingsShared";
 
 export const maxDuration = 300;
 
@@ -58,9 +59,9 @@ async function generateTitle(client: Anthropic, userMessage: string, answer: str
 }
 
 export async function POST(request: Request) {
-  let chatId: unknown, message: unknown, regenerate: unknown, replaceFrom: unknown;
+  let chatId: unknown, message: unknown, regenerate: unknown, replaceFrom: unknown, model: unknown;
   try {
-    ({ chatId, message, regenerate, replaceFrom } = await request.json());
+    ({ chatId, message, regenerate, replaceFrom, model } = await request.json());
   } catch {
     return Response.json({ error: "Ongeldige aanvraag" }, { status: 400 });
   }
@@ -104,6 +105,16 @@ export async function POST(request: Request) {
   }
 
   const settings = await getSettings();
+
+  // Per-chat modelkeuze: meegestuurde keuze bewaren op de chat; anders de
+  // eerder bewaarde keuze; anders de standaard uit Instellingen.
+  if (typeof model === "string" && MODEL_OPTIONS.some((m) => m.id === model)) {
+    chat.model = model;
+  }
+  const chatModel =
+    chat.model && MODEL_OPTIONS.some((m) => m.id === chat.model)
+      ? chat.model
+      : settings.model;
 
   // Demo-modus: stream een mock-antwoord zonder de Anthropic-API aan te roepen.
   if (settings.demoMode) {
@@ -178,10 +189,10 @@ export async function POST(request: Request) {
 
   try {
     const stream = client.messages.stream({
-      model: settings.model,
+      model: chatModel,
       max_tokens: settings.maxTokens,
       // Haiku ondersteunt geen adaptive thinking — parameter dan weglaten
-      ...(settings.model.includes("haiku")
+      ...(chatModel.includes("haiku")
         ? {}
         : { thinking: { type: "adaptive" as const } }),
       system,

@@ -7,8 +7,79 @@ import rehypeHighlight from "rehype-highlight";
 import AppShell, { CHATS_UPDATED_EVENT } from "@/components/AppShell";
 import type { ChatMessage } from "@/lib/chatStore";
 import type { PromptTemplate } from "@/lib/promptStore";
+import { MODEL_OPTIONS } from "@/lib/settingsShared";
 import { useGreeting } from "@/lib/greeting";
 import { useTypewriter } from "@/lib/animation";
+
+// Korte weergavenaam: "Claude Opus 4.8" → "Opus 4.8".
+function shortModelLabel(id: string) {
+  const label = MODEL_OPTIONS.find((m) => m.id === id)?.label ?? id;
+  return label.replace(/^Claude\s+/, "");
+}
+
+// Modelkeuze per gesprek, zoals Claude's selector in de chatbalk.
+function ModelPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative shrink-0">
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="animate-scale-in absolute bottom-full left-0 z-20 mb-2 w-72 overflow-hidden rounded-xl border border-slate-900/10 bg-white p-1.5 shadow-xl shadow-slate-900/10 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/50">
+            {MODEL_OPTIONS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => {
+                  onChange(m.id);
+                  setOpen(false);
+                }}
+                aria-pressed={value === m.id}
+                className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left transition ${
+                  value === m.id
+                    ? "bg-accent-500/10"
+                    : "hover:bg-slate-900/5 dark:hover:bg-white/5"
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+                    {shortModelLabel(m.id)}
+                  </span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    {m.description}
+                  </span>
+                </span>
+                {value === m.id && (
+                  <span className="ml-auto mt-0.5 text-accent-600 dark:text-accent-400">✓</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Model kiezen voor dit gesprek"
+        className="flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
+      >
+        {shortModelLabel(value)}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3" aria-hidden>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+    </div>
+  );
+}
 
 function TemplatesButton({
   currentInput,
@@ -275,6 +346,9 @@ function ChatView() {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<{ index: number; text: string } | null>(null);
   const [atBottom, setAtBottom] = useState(true);
+  // Modelkeuze: null = standaard uit Instellingen; anders per-chat override.
+  const [model, setModel] = useState<string | null>(null);
+  const [defaultModel, setDefaultModel] = useState(MODEL_OPTIONS[0].id);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -287,8 +361,28 @@ function ChatView() {
   if (prevChatId !== chatId) {
     setPrevChatId(chatId);
     setError("");
-    if (!chatId && !busy) setMessages([]);
+    if (!chatId && !busy) {
+      setMessages([]);
+      setModel(null);
+    }
   }
+
+  // Standaardmodel uit Instellingen, voor de weergave in de modelkiezer.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/settings");
+        const data = await res.json();
+        if (!cancelled && data.settings?.model) setDefaultModel(data.settings.model);
+      } catch {
+        // standaard blijft dan de eerste optie
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Laad bestaande chat bij selectie in de sidebar.
   useEffect(() => {
@@ -298,7 +392,10 @@ function ChatView() {
       const res = await fetch(`/api/chats/${chatId}`);
       if (!res.ok) return;
       const data = await res.json();
-      if (!cancelled && !abortRef.current) setMessages(data.chat.messages);
+      if (!cancelled && !abortRef.current) {
+        setMessages(data.chat.messages);
+        setModel(data.chat.model ?? null);
+      }
     })();
     return () => {
       cancelled = true;
@@ -334,8 +431,8 @@ function ChatView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           opts?.regenerate
-            ? { chatId, regenerate: true }
-            : { chatId, message: trimmed, replaceFrom: opts?.replaceFrom }
+            ? { chatId, regenerate: true, model: model ?? undefined }
+            : { chatId, message: trimmed, replaceFrom: opts?.replaceFrom, model: model ?? undefined }
         ),
         signal: controller.signal,
       });
@@ -446,6 +543,7 @@ function ChatView() {
           autoFocus
           className="max-h-40 w-full resize-none bg-transparent px-3 py-2 text-[15px] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
         />
+        <ModelPicker value={model ?? defaultModel} onChange={setModel} />
         <TemplatesButton
           currentInput={input}
           onInsert={(text) => {

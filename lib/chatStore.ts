@@ -21,6 +21,8 @@ export interface Chat {
   context?: string;
   // Vastgepinde chats staan bovenaan in de sidebar
   pinned?: boolean;
+  // Per-chat modelkeuze; ontbreekt = de standaard uit Instellingen
+  model?: string;
 }
 
 export interface ChatSummary {
