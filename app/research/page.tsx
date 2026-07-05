@@ -25,16 +25,19 @@ const SEVERITY_STYLES: Record<ThreatLevel, string> = {
   hoog: "bg-red-500/10 text-red-700 dark:text-red-300 border-red-600/30 dark:border-red-500/30",
 };
 
-function scoreColor(score: number) {
-  if (score >= 70) return "text-accent-700 dark:text-accent-300";
-  if (score >= 45) return "text-amber-700 dark:text-amber-300";
-  return "text-red-700 dark:text-red-300";
+// Severity-kleur van de ring: 600-stappen, gevalideerd op contrast tegen
+// zowel het lichte als het donkere oppervlak. Het cijfer zelf blijft in
+// inkt-kleur — tekst draagt nooit de datakleur.
+function ringColor(score: number) {
+  if (score >= 70) return "var(--accent-600)";
+  if (score >= 45) return "#d97706"; // amber-600
+  return "#dc2626"; // red-600
 }
 
-function scoreBarColor(score: number) {
-  if (score >= 70) return "bg-accent-400";
-  if (score >= 45) return "bg-amber-400";
-  return "bg-red-400";
+function scoreLabel(score: number) {
+  if (score >= 70) return "Sterk";
+  if (score >= 45) return "Gemiddeld";
+  return "Zwak";
 }
 
 function SeverityBadge({ level }: { level: ThreatLevel }) {
@@ -47,27 +50,70 @@ function SeverityBadge({ level }: { level: ThreatLevel }) {
   );
 }
 
+// Score als moderne ring-gauge (radiale meter): de gevulde boog draagt de
+// severity-kleur, het spoor is dezelfde tint op lage dekking, het cijfer
+// staat in inkt-kleur in het midden en telt op bij binnenkomst.
 function ScoreCard({ label, score, subtitle }: { label: string; score: number; subtitle: string }) {
   const clamped = Math.max(0, Math.min(100, score));
   const shown = useCountUp(clamped);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const R = 42;
+  const CIRC = 2 * Math.PI * R;
+  const color = ringColor(clamped);
+
   return (
-    <div className="rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6">
-      <div className="flex items-baseline justify-between gap-4">
-        <h3 className="font-[family-name:var(--font-display)] text-sm font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400">
+    <div className="flex items-center gap-5 rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6">
+      <div className="relative h-28 w-28 shrink-0" role="img" aria-label={`${label}: ${clamped} van 100`}>
+        <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+          {/* Spoor: dezelfde tint op lage dekking, zodat de hele meter leest */}
+          <circle
+            cx="50"
+            cy="50"
+            r={R}
+            fill="none"
+            stroke={color}
+            strokeOpacity="0.15"
+            strokeWidth="9"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r={R}
+            fill="none"
+            stroke={color}
+            strokeWidth="9"
+            strokeLinecap="round"
+            strokeDasharray={CIRC}
+            strokeDashoffset={mounted ? CIRC * (1 - clamped / 100) : CIRC}
+            style={{ transition: "stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1)" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-2xl font-semibold tabular-nums leading-none text-slate-900 dark:text-white">
+            {shown}
+          </span>
+          <span className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">/100</span>
+        </div>
+      </div>
+      <div className="min-w-0">
+        <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
           {label}
         </h3>
-        <span className={`font-[family-name:var(--font-display)] text-4xl font-bold tabular-nums ${scoreColor(clamped)}`}>
-          {shown}
-          <span className="text-base font-normal text-slate-500">/100</span>
-        </span>
+        <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-slate-900 dark:text-slate-100">
+          <span
+            aria-hidden
+            className="inline-block h-2 w-2 rounded-full"
+            style={{ backgroundColor: color }}
+          />
+          {scoreLabel(clamped)}
+        </p>
+        <p className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{subtitle}</p>
       </div>
-      <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/5">
-        <div
-          className={`h-full rounded-full ${scoreBarColor(clamped)} animate-grow-bar`}
-          style={{ width: `${clamped}%` }}
-        />
-      </div>
-      <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">{subtitle}</p>
     </div>
   );
 }

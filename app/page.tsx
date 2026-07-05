@@ -33,63 +33,182 @@ interface DayStat {
   count: number;
 }
 
-// Mini-staafdiagram: berichten per dag (één serie, accent-600 op beide
-// thema's — gevalideerd op contrast; het max-label en de tooltip zijn de
-// zichtbare waardelaag).
+// Vloeiend pad (monotone cubic, Fritsch–Carlson): glad zoals moderne
+// fintech-grafieken, maar zonder overshoot voorbij de datapunten.
+function smoothPath(pts: { x: number; y: number }[]): string {
+  const n = pts.length;
+  if (n < 2) return "";
+  const dx: number[] = [];
+  const slope: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = pts[i + 1].x - pts[i].x;
+    slope[i] = (pts[i + 1].y - pts[i].y) / dx[i];
+  }
+  const m: number[] = [slope[0]];
+  for (let i = 1; i < n - 1; i++) {
+    if (slope[i - 1] * slope[i] <= 0) {
+      m[i] = 0;
+    } else {
+      const w1 = 2 * dx[i] + dx[i - 1];
+      const w2 = dx[i] + 2 * dx[i - 1];
+      m[i] = (w1 + w2) / (w1 / slope[i - 1] + w2 / slope[i]);
+    }
+  }
+  m[n - 1] = slope[n - 2];
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 0; i < n - 1; i++) {
+    const c1x = pts[i].x + dx[i] / 3;
+    const c1y = pts[i].y + (m[i] * dx[i]) / 3;
+    const c2x = pts[i + 1].x - dx[i] / 3;
+    const c2y = pts[i + 1].y - (m[i + 1] * dx[i]) / 3;
+    d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${pts[i + 1].x} ${pts[i + 1].y}`;
+  }
+  return d;
+}
+
+// Activiteit als moderne area-grafiek: één serie in accent-600 (gevalideerd
+// op contrast voor licht én donker), gradient-wash eronder, crosshair die
+// naar de dichtstbijzijnde dag snapt, en een stat-kop met weekdelta.
 function ActivityChart({ days }: { days: DayStat[] }) {
   const [hover, setHover] = useState<number | null>(null);
-  const max = Math.max(...days.map((d) => d.count), 1);
   const total = days.reduce((sum, d) => sum + d.count, 0);
-  const maxIndex = total > 0 ? days.findIndex((d) => d.count === max) : -1;
-  const weekday = (iso: string) =>
-    new Date(`${iso}T12:00:00`).toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" });
+  const lastWeek = days.slice(7).reduce((s, d) => s + d.count, 0);
+  const prevWeek = days.slice(0, 7).reduce((s, d) => s + d.count, 0);
+  const delta = prevWeek > 0 ? Math.round(((lastWeek - prevWeek) / prevWeek) * 100) : null;
+
+  const W = 560;
+  const H = 120;
+  const PAD_X = 6;
+  const PAD_TOP = 10;
+  const PAD_BOTTOM = 6;
+  const max = Math.max(...days.map((d) => d.count), 1);
+  const pts = days.map((d, i) => ({
+    x: PAD_X + (i / (days.length - 1)) * (W - PAD_X * 2),
+    y: PAD_TOP + (1 - d.count / max) * (H - PAD_TOP - PAD_BOTTOM),
+  }));
+  const line = smoothPath(pts);
+  const area = `${line} L ${pts[pts.length - 1].x} ${H} L ${pts[0].x} ${H} Z`;
+  const last = pts[pts.length - 1];
+  const active = hover !== null ? pts[hover] : null;
+
+  const dayLabel = (iso: string) =>
+    new Date(`${iso}T12:00:00`).toLocaleDateString("nl-NL", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+
+  // Crosshair snapt naar de dichtstbijzijnde dag — de lezer mikt op een
+  // datum, nooit op een 2px-lijn.
+  function onMove(e: React.PointerEvent<SVGSVGElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * W;
+    const i = Math.round(((x - PAD_X) / (W - PAD_X * 2)) * (days.length - 1));
+    setHover(Math.max(0, Math.min(days.length - 1, i)));
+  }
 
   return (
     <section
       className="animate-fade-up mx-auto mt-10 w-full max-w-2xl rounded-2xl border border-slate-900/10 bg-white p-5 dark:border-white/10 dark:bg-white/[0.03]"
       style={{ animationDelay: "0.22s" }}
     >
-      <div className="flex items-baseline justify-between">
+      {/* Stat-kop: label, waarde (volgt de hover), delta t.o.v. vorige week */}
+      <div>
         <h2 className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-          Activiteit · berichten per dag
+          Berichten · 14 dagen
         </h2>
-        <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
-          {total} in 14 dagen
-        </span>
-      </div>
-      <div className="mt-3 flex h-16 items-end gap-[3px]" role="img" aria-label={`Berichten per dag, laatste 14 dagen, totaal ${total}`}>
-        {days.map((d, i) => (
-          <div
-            key={d.date}
-            onMouseEnter={() => setHover(i)}
-            onMouseLeave={() => setHover(null)}
-            className="relative flex h-full flex-1 items-end"
-          >
-            {(hover === i || (hover === null && i === maxIndex)) && d.count > 0 && (
-              <span className="absolute -top-1 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-slate-900/10 bg-white px-1.5 py-0.5 text-[10px] tabular-nums text-slate-700 shadow-sm dark:border-white/10 dark:bg-[#0d1526] dark:text-slate-300">
-                {hover === i ? `${weekday(d.date)} · ${d.count}` : d.count}
+        <p className="mt-1 flex items-baseline gap-2.5">
+          <span className="text-3xl font-semibold tabular-nums text-slate-900 dark:text-white">
+            {hover !== null ? days[hover].count : total}
+          </span>
+          {hover !== null ? (
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {dayLabel(days[hover].date)}
+            </span>
+          ) : (
+            delta !== null && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${
+                  delta >= 0
+                    ? "bg-accent-500/10 text-accent-700 dark:text-accent-300"
+                    : "bg-red-500/10 text-red-700 dark:text-red-300"
+                }`}
+              >
+                {delta >= 0 ? "+" : ""}
+                {delta}% t.o.v. vorige week
               </span>
-            )}
-            <div
-              style={{
-                height: d.count > 0 ? `${Math.max(8, (d.count / max) * 100)}%` : "3px",
-                backgroundColor: d.count > 0 ? "var(--accent-600)" : undefined,
-              }}
-              className={`w-full rounded-t-[3px] transition-opacity ${
-                d.count === 0
-                  ? "bg-slate-900/15 dark:bg-white/10"
-                  : hover !== null && hover !== i
-                    ? "opacity-50"
-                    : ""
-              }`}
-            />
-          </div>
-        ))}
+            )
+          )}
+        </p>
       </div>
-      <div className="mt-1.5 flex justify-between text-[10px] text-slate-400 dark:text-slate-600">
-        <span>{weekday(days[0].date)}</span>
+
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={`Berichten per dag, laatste 14 dagen, totaal ${total}`}
+        onPointerMove={onMove}
+        onPointerLeave={() => setHover(null)}
+        className="mt-3 h-28 w-full touch-none"
+      >
+        <defs>
+          <linearGradient id="activity-wash" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent-600)" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="var(--accent-600)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Recessieve hairline-gridlijnen */}
+        {[0.5, 1].map((f) => {
+          const y = PAD_TOP + (1 - f) * (H - PAD_TOP - PAD_BOTTOM);
+          return (
+            <line
+              key={f}
+              x1={PAD_X}
+              x2={W - PAD_X}
+              y1={y}
+              y2={y}
+              className="stroke-slate-900/[0.06] dark:stroke-white/[0.06]"
+              strokeWidth="1"
+            />
+          );
+        })}
+
+        <path d={area} fill="url(#activity-wash)" />
+        <path
+          d={line}
+          fill="none"
+          stroke="var(--accent-600)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Crosshair + actief punt (met 2px surface-ring) */}
+        {active && (
+          <line
+            x1={active.x}
+            x2={active.x}
+            y1={PAD_TOP - 4}
+            y2={H}
+            className="stroke-slate-900/15 dark:stroke-white/20"
+            strokeWidth="1"
+          />
+        )}
+        <circle
+          cx={active ? active.x : last.x}
+          cy={active ? active.y : last.y}
+          r="4.5"
+          fill="var(--accent-600)"
+          className="stroke-white dark:stroke-[#0d1526]"
+          strokeWidth="2"
+        />
+      </svg>
+
+      <div className="mt-1 flex justify-between text-[10px] text-slate-400 dark:text-slate-600">
+        <span>{dayLabel(days[0].date)}</span>
         <span>vandaag</span>
       </div>
+
       <table className="sr-only">
         <caption>Berichten per dag, laatste 14 dagen</caption>
         <tbody>
