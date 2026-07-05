@@ -10,6 +10,9 @@ export interface User {
   salt: string;
   hash: string;
   createdAt: string;
+  // Herstelcode (voor wachtwoord-reset zonder e-mailserver), ook gehasht.
+  recoverySalt?: string;
+  recoveryHash?: string;
 }
 
 // Publieke weergave van een gebruiker — nooit salt/hash naar de client sturen.
@@ -150,4 +153,66 @@ export async function changePassword(
 export async function deleteUser(id: string): Promise<void> {
   const users = await readAll();
   await writeAll(users.filter((u) => u.id !== id));
+}
+
+/* ---------- Herstelcode (wachtwoord vergeten, zonder e-mailserver) ---------- */
+
+// Leesbaar formaat XXXX-XXXX-XXXX zonder verwarrende tekens (geen O/0, I/1).
+function newRecoveryCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = randomBytes(12);
+  const chars = Array.from(bytes, (b) => alphabet[b % alphabet.length]);
+  return [chars.slice(0, 4), chars.slice(4, 8), chars.slice(8, 12)]
+    .map((g) => g.join(""))
+    .join("-");
+}
+
+function normalizeRecoveryCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+// Geeft een nieuwe herstelcode uit voor de gebruiker; de code wordt alleen
+// gehasht bewaard en is dus maar één keer zichtbaar voor de gebruiker.
+export async function issueRecoveryCode(id: string): Promise<string | null> {
+  const users = await readAll();
+  const user = users.find((u) => u.id === id);
+  if (!user) return null;
+  const code = newRecoveryCode();
+  const { salt, hash } = hashPassword(normalizeRecoveryCode(code));
+  user.recoverySalt = salt;
+  user.recoveryHash = hash;
+  await writeAll(users);
+  return code;
+}
+
+// Reset het wachtwoord met e-mail + herstelcode. De code is eenmalig:
+// na een geslaagde reset wordt direct een nieuwe uitgegeven en teruggegeven.
+export async function resetPasswordWithCode(
+  email: string,
+  code: string,
+  newPassword: string
+): Promise<{ ok: boolean; error?: string; recoveryCode?: string }> {
+  // Bewust één generieke foutmelding, zodat niet te raden is of het
+  // e-mailadres bestaat of de code fout is.
+  const invalid = { ok: false, error: "Onjuiste combinatie van e-mailadres en herstelcode." };
+  const users = await readAll();
+  const user = users.find((u) => u.email === email.trim().toLowerCase());
+  if (!user?.recoverySalt || !user?.recoveryHash) return invalid;
+
+  const candidate = scryptSync(normalizeRecoveryCode(code), user.recoverySalt, 64);
+  const known = Buffer.from(user.recoveryHash, "hex");
+  if (candidate.length !== known.length || !timingSafeEqual(candidate, known)) return invalid;
+
+  if (typeof newPassword !== "string" || newPassword.length < 8) {
+    return { ok: false, error: "Nieuw wachtwoord moet minimaal 8 tekens zijn." };
+  }
+  const { salt, hash } = hashPassword(newPassword);
+  user.salt = salt;
+  user.hash = hash;
+  const fresh = newRecoveryCode();
+  const rc = hashPassword(normalizeRecoveryCode(fresh));
+  user.recoverySalt = rc.salt;
+  user.recoveryHash = rc.hash;
+  await writeAll(users);
+  return { ok: true, recoveryCode: fresh };
 }

@@ -175,23 +175,47 @@ export default function SettingsModal({
   const [pwMessage, setPwMessage] = useState("");
   const [pwError, setPwError] = useState("");
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  // Herstelcode (eenmalig zichtbaar) en de open/dicht-stand van registratie.
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+  const [regOpen, setRegOpen] = useState<boolean | null>(null);
 
   useEffect(() => {
     (async () => {
-      const [settingsRes, chatsRes, meRes] = await Promise.all([
+      const [settingsRes, chatsRes, meRes, regRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/chats"),
         fetch("/api/auth/me"),
+        fetch("/api/auth/register"),
       ]);
       const settingsData = await settingsRes.json();
       const chatsData = await chatsRes.json();
       const meData = await meRes.json();
+      const regData = await regRes.json();
       setSettings(settingsData.settings);
       setApiKeyConfigured(settingsData.apiKeyConfigured);
       setChatCount(chatsData.chats?.length ?? 0);
       if (meData.user) setAccount({ name: meData.user.name ?? "", email: meData.user.email ?? "" });
+      setRegOpen(regData.open === true);
     })();
   }, []);
+
+  async function generateRecoveryCode() {
+    const res = await fetch("/api/account/recovery", { method: "POST" });
+    const data = await res.json();
+    if (res.ok) setRecoveryCode(data.recoveryCode);
+  }
+
+  async function toggleRegistration() {
+    const next = !(regOpen === true);
+    setRegOpen(next);
+    const res = await fetch("/api/auth/register", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ open: next }),
+    });
+    const data = await res.json();
+    if (res.ok) setRegOpen(data.open === true);
+  }
 
   // Naam of e-mail van het account opslaan.
   async function saveAccount(patch: { name?: string; email?: string }) {
@@ -474,6 +498,33 @@ export default function SettingsModal({
                         </button>
                       </div>
                     </div>
+                  </Row>
+                </Group>
+
+                <Group>
+                  <Row
+                    title="Herstelcode"
+                    description="Waarmee je je wachtwoord kunt resetten als je het vergeet. Een nieuwe code maakt de oude ongeldig en wordt maar één keer getoond."
+                    stacked={recoveryCode !== null}
+                  >
+                    {recoveryCode === null ? (
+                      <button
+                        onClick={generateRecoveryCode}
+                        className="rounded-xl border border-slate-900/15 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-accent-400/50 dark:border-white/15 dark:text-slate-300"
+                      >
+                        Nieuwe code genereren
+                      </button>
+                    ) : (
+                      <p className="select-all rounded-xl border border-accent-600/30 bg-accent-500/10 px-4 py-3 text-center font-[family-name:var(--font-mono)] text-base font-semibold tracking-wider text-accent-700 dark:border-accent-500/30 dark:text-accent-300">
+                        {recoveryCode}
+                      </p>
+                    )}
+                  </Row>
+                  <Row
+                    title="Open registratie"
+                    description="Sta toe dat nieuwe accounts zich registreren. Uit = alleen bestaande accounts kunnen inloggen."
+                  >
+                    <Switch on={regOpen === true} onToggle={toggleRegistration} />
                   </Row>
                 </Group>
 

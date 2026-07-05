@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -17,6 +17,27 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Registratie kan gesloten zijn (app-instelling); null = nog aan het laden.
+  const [regOpen, setRegOpen] = useState<boolean | null>(null);
+  // Na registratie tonen we eenmalig de herstelcode.
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isLogin) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/register");
+        const data = await res.json();
+        if (!cancelled) setRegOpen(data.open === true);
+      } catch {
+        if (!cancelled) setRegOpen(true); // bij twijfel het formulier tonen
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLogin]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,6 +62,12 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
         setLoading(false);
         return;
       }
+      // Bij registratie eerst de herstelcode tonen; daarna pas de app in.
+      if (!isLogin && data.recoveryCode) {
+        setRecoveryCode(data.recoveryCode);
+        setLoading(false);
+        return;
+      }
       // Volledige refresh zodat de proxy de nieuwe sessie oppikt.
       router.replace(from && from.startsWith("/") ? from : "/");
       router.refresh();
@@ -48,6 +75,11 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
       setError("Kan geen verbinding maken. Probeer het opnieuw.");
       setLoading(false);
     }
+  }
+
+  function enterApp() {
+    router.replace(from && from.startsWith("/") ? from : "/");
+    router.refresh();
   }
 
   const inputCls =
@@ -66,6 +98,48 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
           </p>
         </div>
 
+        {/* Na registratie: eenmalig de herstelcode tonen */}
+        {recoveryCode && (
+          <div className="rounded-2xl border border-slate-900/10 bg-white p-6 shadow-xl shadow-slate-900/5 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/30">
+            <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
+              Bewaar je herstelcode
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              Met deze code kun je je wachtwoord resetten als je het vergeet. Ze wordt
+              maar één keer getoond — bewaar haar op een veilige plek.
+            </p>
+            <p className="mt-4 select-all rounded-xl border border-accent-600/30 bg-accent-500/10 px-4 py-3 text-center font-[family-name:var(--font-mono)] text-lg font-semibold tracking-wider text-accent-700 dark:border-accent-500/30 dark:text-accent-300">
+              {recoveryCode}
+            </p>
+            <button
+              onClick={enterApp}
+              className="mt-5 flex w-full items-center justify-center rounded-xl bg-accent-500 px-4 py-2.5 text-sm font-semibold text-accent-950 transition hover:bg-accent-400 active:scale-[0.99]"
+            >
+              Ik heb de code bewaard — naar Vantage
+            </button>
+          </div>
+        )}
+
+        {/* Registratie gesloten */}
+        {!recoveryCode && !isLogin && regOpen === false && (
+          <div className="rounded-2xl border border-slate-900/10 bg-white p-6 text-center shadow-xl shadow-slate-900/5 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/30">
+            <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
+              Registratie is gesloten
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              Er kunnen momenteel geen nieuwe accounts worden aangemaakt. Vraag de
+              beheerder om registratie te openen via Instellingen → Account.
+            </p>
+            <Link
+              href="/login"
+              className="mt-5 inline-block rounded-xl bg-accent-500 px-5 py-2.5 text-sm font-semibold text-accent-950 transition hover:bg-accent-400"
+            >
+              Naar inloggen
+            </Link>
+          </div>
+        )}
+
+        {!recoveryCode && (isLogin || regOpen !== false) && (
         <div className="rounded-2xl border border-slate-900/10 bg-white p-6 shadow-xl shadow-slate-900/5 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/30">
           <h1 className="mb-5 text-lg font-semibold text-slate-900 dark:text-white">
             {isLogin ? "Inloggen" : "Account aanmaken"}
@@ -151,18 +225,32 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
             >
               {loading ? "Bezig…" : isLogin ? "Inloggen" : "Account aanmaken"}
             </button>
+
+            {isLogin && (
+              <p className="text-center">
+                <Link
+                  href="/reset"
+                  className="text-xs text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline dark:text-slate-500 dark:hover:text-slate-300"
+                >
+                  Wachtwoord vergeten?
+                </Link>
+              </p>
+            )}
           </form>
         </div>
+        )}
 
-        <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
-          {isLogin ? "Nog geen account? " : "Heb je al een account? "}
-          <Link
-            href={isLogin ? "/register" : "/login"}
-            className="font-medium text-accent-700 underline-offset-2 hover:underline dark:text-accent-400"
-          >
-            {isLogin ? "Registreren" : "Inloggen"}
-          </Link>
-        </p>
+        {!recoveryCode && (
+          <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
+            {isLogin ? "Nog geen account? " : "Heb je al een account? "}
+            <Link
+              href={isLogin ? "/register" : "/login"}
+              className="font-medium text-accent-700 underline-offset-2 hover:underline dark:text-accent-400"
+            >
+              {isLogin ? "Registreren" : "Inloggen"}
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

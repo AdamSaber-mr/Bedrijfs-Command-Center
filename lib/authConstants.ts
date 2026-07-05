@@ -3,4 +3,4 @@
 export const SESSION_COOKIE = "vantage_session";
 
 // Publieke paden die zonder sessie bereikbaar zijn.
-export const PUBLIC_PATHS = ["/login", "/register"];
+export const PUBLIC_PATHS = ["/login", "/register", "/reset"];
