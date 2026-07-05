@@ -450,10 +450,7 @@ function ResearchView() {
       ) : (
         <div className="flex flex-col items-center pt-20 sm:pt-28">
           <div className="animate-fade-up flex max-w-2xl flex-col items-center text-center">
-            <span className="rounded-full border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 px-3 py-1 text-xs font-medium tracking-wide text-accent-700 dark:text-accent-300">
-              Aangedreven door Claude
-            </span>
-            <h1 className="mt-6 font-[family-name:var(--font-display)] text-4xl font-bold leading-tight text-slate-900 dark:text-white sm:text-5xl">
+            <h1 className="font-[family-name:var(--font-display)] text-4xl font-bold leading-tight text-slate-900 dark:text-white sm:text-5xl">
               Company &amp; Deal
               <br />
               <span className="text-accent-600 dark:text-accent-400">Research Assistant</span>
