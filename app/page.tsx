@@ -22,10 +22,41 @@ function relativeTime(iso: string) {
   return new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
 }
 
-function scoreColor(score: number) {
-  if (score >= 70) return "text-accent-700 dark:text-accent-300";
-  if (score >= 45) return "text-amber-700 dark:text-amber-300";
-  return "text-red-700 dark:text-red-300";
+// Mini-ring voor scorekaartjes: zelfde severity-tinten (600-stappen,
+// gevalideerd op contrast voor licht en donker) als de grote ringen op het
+// rapport; het cijfer blijft in inkt-kleur.
+function MiniRing({ score, label }: { score: number; label: string }) {
+  const clamped = Math.max(0, Math.min(100, score));
+  const color =
+    clamped >= 70 ? "var(--accent-600)" : clamped >= 45 ? "#d97706" : "#dc2626";
+  const R = 15;
+  const CIRC = 2 * Math.PI * R;
+  return (
+    <span className="flex flex-col items-center gap-0.5" role="img" aria-label={`${label}: ${clamped} van 100`}>
+      <span className="relative h-9 w-9">
+        <svg viewBox="0 0 36 36" className="h-full w-full -rotate-90">
+          <circle cx="18" cy="18" r={R} fill="none" stroke={color} strokeOpacity="0.15" strokeWidth="3.5" />
+          <circle
+            cx="18"
+            cy="18"
+            r={R}
+            fill="none"
+            stroke={color}
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            strokeDasharray={CIRC}
+            strokeDashoffset={CIRC * (1 - clamped / 100)}
+          />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold tabular-nums text-slate-900 dark:text-white">
+          {clamped}
+        </span>
+      </span>
+      <span className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600">
+        {label}
+      </span>
+    </span>
+  );
 }
 
 interface DayStat {
@@ -403,23 +434,9 @@ function DashboardView() {
                     {relativeTime(report.createdAt)}
                   </span>
                 </span>
-                <span className="flex shrink-0 gap-4 text-right">
-                  <span>
-                    <span className={`block font-[family-name:var(--font-display)] text-sm font-bold tabular-nums ${scoreColor(report.marketScore)}`}>
-                      {report.marketScore}
-                    </span>
-                    <span className="block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600">
-                      markt
-                    </span>
-                  </span>
-                  <span>
-                    <span className={`block font-[family-name:var(--font-display)] text-sm font-bold tabular-nums ${scoreColor(report.fitScore)}`}>
-                      {report.fitScore}
-                    </span>
-                    <span className="block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-600">
-                      fit
-                    </span>
-                  </span>
+                <span className="flex shrink-0 gap-3">
+                  <MiniRing score={report.marketScore} label="markt" />
+                  <MiniRing score={report.fitScore} label="fit" />
                 </span>
               </Link>
             ))}

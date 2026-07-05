@@ -24,6 +24,9 @@ export async function GET(
         `_${new Date(m.at).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" })}_`
       );
     }
+    for (const att of m.attachments ?? []) {
+      lines.push(`> 📎 Bijlage: ${att.name}`);
+    }
     lines.push("", m.content, "");
   }
 

@@ -478,6 +478,51 @@ function Sidebar({
   const [menuChatId, setMenuChatId] = useState<string | null>(null);
   const [menuReportId, setMenuReportId] = useState<string | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  // Projecten voor "Verplaats naar project" en het maplabel bij chats.
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    // Vers ophalen zodra een chatmenu opent, zodat nieuwe projecten meetellen.
+    if (menuChatId === null) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/projects");
+        const data = await res.json();
+        if (!cancelled) setProjects(data.projects ?? []);
+      } catch {
+        // projectenlijst mag stil falen
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [menuChatId]);
+
+  // Ook op mount laden, voor de maplabels bij gekoppelde chats.
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/projects");
+        const data = await res.json();
+        setProjects(data.projects ?? []);
+      } catch {
+        // stil falen
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const projectName = (id?: string) => projects.find((p) => p.id === id)?.name;
+
+  async function moveToProject(chatId: string, projectId: string | null) {
+    await fetch(`/api/chats/${chatId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId }),
+    });
+    refreshChats();
+  }
 
   async function removeChat(id: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -585,6 +630,11 @@ function Sidebar({
           {chat.pinned && (
             <Icon d={ICONS.pin} className="h-3 w-3 shrink-0 text-accent-600 dark:text-accent-400" />
           )}
+          {chat.projectId && (
+            <span title={projectName(chat.projectId) ?? "Project"}>
+              <Icon d={ICONS.folder} className="h-3 w-3 shrink-0 text-slate-400 dark:text-slate-500" />
+            </span>
+          )}
           <span className="min-w-0 flex-1 truncate">{chat.title}</span>
         </button>
         <button
@@ -620,6 +670,33 @@ function Sidebar({
                   startRename(chat, e);
                 }}
               />
+              {projects.length > 0 && (
+                <>
+                  <div className="my-1 h-px bg-slate-900/[0.07] dark:bg-white/[0.07]" />
+                  <p className="px-3 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    Verplaats naar project
+                  </p>
+                  <div className="max-h-36 overflow-y-auto">
+                    {projects.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setMenuChatId(null);
+                          moveToProject(chat.id, chat.projectId === p.id ? null : p.id);
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-sm text-slate-700 transition hover:bg-slate-900/5 dark:text-slate-300 dark:hover:bg-white/5"
+                      >
+                        <Icon d={ICONS.folder} className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                        {chat.projectId === p.id && (
+                          <span className="shrink-0 text-accent-600 dark:text-accent-400">✓</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              <div className="my-1 h-px bg-slate-900/[0.07] dark:bg-white/[0.07]" />
               <MenuItem
                 icon={ICONS.trash}
                 label="Verwijderen"

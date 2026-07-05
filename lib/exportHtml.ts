@@ -90,7 +90,16 @@ const STYLE = `
   .sources { font-size: 13px; }
   .sources li + li { margin-top: 4px; }
   footer { margin-top: 44px; color: #94a3b8; font-size: 12px; }
+  .atts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .att-img { max-width: 320px; max-height: 240px; border-radius: 10px;
+             border: 1px solid rgba(15,23,42,.1); }
+  .att-chip { display: inline-block; font-size: 12px; color: #475569;
+              background: rgba(15,23,42,.05); border: 1px solid rgba(15,23,42,.08);
+              border-radius: 8px; padding: 4px 10px; }
   @media (prefers-color-scheme: dark) {
+    .att-img { border-color: rgba(255,255,255,.12); }
+    .att-chip { color: #94a3b8; background: rgba(255,255,255,.06);
+                border-color: rgba(255,255,255,.1); }
     body { background: #0a0f1a; color: #e2e8f0; }
     .meta { color: #94a3b8; }
     .divider { border-top-color: rgba(255,255,255,.12); }
@@ -138,8 +147,18 @@ export function chatToHtml(chat: Chat, userName: string): string {
       const at = m.at
         ? ` · ${new Date(m.at).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" })}`
         : "";
+      // Bijlagen: afbeeldingen worden in het bestand geëmbed (data-URI),
+      // overige bijlagen als vermelding met bestandsnaam.
+      const attachments = (m.attachments ?? [])
+        .map((att) =>
+          att.mediaType.startsWith("image/")
+            ? `<img class="att-img" src="data:${esc(att.mediaType)};base64,${att.data.replace(/[^A-Za-z0-9+/=]/g, "")}" alt="${esc(att.name)}">`
+            : `<span class="att-chip">📎 ${esc(att.name)}</span>`
+        )
+        .join("");
       return `<section class="msg">
 <p class="who ${m.role === "user" ? "user" : ""}">${who}${at}</p>
+${attachments ? `<div class="atts">${attachments}</div>` : ""}
 <div class="bubble">${md(m.content)}</div>
 </section>`;
     })
