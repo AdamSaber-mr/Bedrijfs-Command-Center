@@ -4,6 +4,7 @@ import { getReport, listReports, type SavedReport } from "@/lib/reportStore";
 import { allNotes, type Note } from "@/lib/noteStore";
 import { listPrompts, addPrompt, type PromptTemplate } from "@/lib/promptStore";
 import { getSettings, saveSettings } from "@/lib/settings";
+import { requireUserId, userRoot } from "@/lib/auth";
 import { promises as fs } from "fs";
 import path from "path";
 
@@ -58,9 +59,11 @@ export async function POST(request: Request) {
   }
 
   const counts = { chats: 0, reports: 0, notes: 0, prompts: 0 };
+  // Alles onder de map van de ingelogde gebruiker (data/users/<id>/…).
+  const root = userRoot(await requireUserId());
 
   if (Array.isArray(backup.chats)) {
-    const dir = path.join(process.cwd(), "data", "chats");
+    const dir = path.join(root, "chats");
     await fs.mkdir(dir, { recursive: true });
     for (const chat of backup.chats as Chat[]) {
       if (chat?.id && /^[a-zA-Z0-9-]+$/.test(chat.id) && Array.isArray(chat.messages)) {
@@ -76,7 +79,7 @@ export async function POST(request: Request) {
   }
 
   if (Array.isArray(backup.reports)) {
-    const dir = path.join(process.cwd(), "data", "reports");
+    const dir = path.join(root, "reports");
     await fs.mkdir(dir, { recursive: true });
     for (const report of backup.reports as SavedReport[]) {
       if (report?.id && /^[a-zA-Z0-9-]+$/.test(report.id) && report.report) {
@@ -91,7 +94,7 @@ export async function POST(request: Request) {
   }
 
   if (Array.isArray(backup.notes)) {
-    const dir = path.join(process.cwd(), "data", "notes");
+    const dir = path.join(root, "notes");
     await fs.mkdir(dir, { recursive: true });
     for (const note of backup.notes as Note[]) {
       if (note?.id && /^[a-zA-Z0-9-]+$/.test(note.id) && typeof note.content === "string") {
