@@ -212,6 +212,13 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
             </h1>
           </div>
           <div className="flex flex-wrap gap-2.5 print:hidden">
+            <a
+              href={`/api/reports/${saved.id}/html`}
+              title="Download als nette standalone pagina om te delen"
+              className="rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:border-accent-400/50 hover:text-slate-900 dark:hover:text-white"
+            >
+              ↗ Delen (HTML)
+            </a>
             <button
               onClick={printReport}
               className="rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:border-accent-400/50 hover:text-slate-900 dark:hover:text-white"

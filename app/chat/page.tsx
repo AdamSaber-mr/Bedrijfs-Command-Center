@@ -623,12 +623,19 @@ function ChatView() {
         >
           <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6">
             {chatId && (
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-1">
+                <a
+                  href={`/api/chats/${chatId}/html`}
+                  title="Download als nette standalone pagina om te delen"
+                  className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/5 dark:hover:text-slate-300"
+                >
+                  ↗ Delen (HTML)
+                </a>
                 <a
                   href={`/api/chats/${chatId}/markdown`}
                   className="rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/5 dark:hover:text-slate-300"
                 >
-                  ⇩ Exporteer als Markdown
+                  ⇩ Markdown
                 </a>
               </div>
             )}
