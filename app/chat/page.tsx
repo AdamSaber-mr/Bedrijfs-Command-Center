@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import AppShell, { CHATS_UPDATED_EVENT } from "@/components/AppShell";
-import type { ChatMessage } from "@/lib/chatStore";
+import { Icon, ICONS } from "@/components/ui";
+import type { ChatAttachment, ChatMessage } from "@/lib/chatStore";
 import type { PromptTemplate } from "@/lib/promptStore";
 import { MODEL_OPTIONS } from "@/lib/settingsShared";
 import { useGreeting } from "@/lib/greeting";
@@ -271,7 +272,29 @@ function MessageBubble({
           }
           className="max-w-[85%] rounded-2xl rounded-br-md border border-accent-600/30 dark:border-accent-500/25 bg-accent-500/10 px-4 py-3 text-[15px] leading-relaxed text-slate-900 dark:text-slate-100"
         >
-          <p className="whitespace-pre-wrap">{message.content}</p>
+          {message.attachments && message.attachments.length > 0 && (
+            <div className={`flex flex-wrap justify-end gap-2 ${message.content ? "mb-2" : ""}`}>
+              {message.attachments.map((att, i) =>
+                att.mediaType.startsWith("image/") ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={i}
+                    src={`data:${att.mediaType};base64,${att.data}`}
+                    alt={att.name}
+                    className="max-h-40 rounded-lg border border-slate-900/10 dark:border-white/10"
+                  />
+                ) : (
+                  <span
+                    key={i}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-900/10 bg-white/60 px-2.5 py-1.5 text-xs text-slate-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-300"
+                  >
+                    📎 {att.name}
+                  </span>
+                )
+              )}
+            </div>
+          )}
+          {message.content && <p className="whitespace-pre-wrap">{message.content}</p>}
         </div>
         {!busy && (
           <button
@@ -349,6 +372,55 @@ function ChatView() {
   // Modelkeuze: null = standaard uit Instellingen; anders per-chat override.
   const [model, setModel] = useState<string | null>(null);
   const [defaultModel, setDefaultModel] = useState(MODEL_OPTIONS[0].id);
+  // Bijlagen die klaarstaan voor het volgende bericht.
+  const [pending, setPending] = useState<ChatAttachment[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Bestanden inlezen als base64 en klaarzetten als bijlage-chips.
+  const ATTACH_TYPES: Record<string, string> = {
+    pdf: "application/pdf",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    txt: "text/plain",
+    md: "text/markdown",
+    csv: "text/csv",
+  };
+
+  async function addFiles(files: FileList | null) {
+    if (!files) return;
+    setError("");
+    const additions: ChatAttachment[] = [];
+    for (const file of Array.from(files)) {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const mediaType = file.type || ATTACH_TYPES[ext] || "";
+      if (!Object.values(ATTACH_TYPES).includes(mediaType)) {
+        setError(`"${file.name}" wordt niet ondersteund (PDF, afbeelding of tekstbestand).`);
+        continue;
+      }
+      if (file.size > 7 * 1024 * 1024) {
+        setError(`"${file.name}" is te groot (max 7 MB per bestand).`);
+        continue;
+      }
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",", 2)[1] ?? "");
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      }).catch(() => null);
+      if (data === null) {
+        setError(`"${file.name}" kon niet worden gelezen.`);
+        continue;
+      }
+      additions.push({ name: file.name, mediaType, data });
+    }
+    if (additions.length > 0) {
+      setPending((prev) => [...prev, ...additions].slice(0, 5));
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -410,16 +482,27 @@ function ChatView() {
 
   async function send(text: string, opts?: { regenerate?: boolean; replaceFrom?: number }) {
     const trimmed = text.trim();
-    if ((!trimmed && !opts?.regenerate) || busy) return;
+    // Bijlagen alleen bij een nieuw bericht (niet bij regenerate/bewerken).
+    const attachments = opts?.regenerate || opts?.replaceFrom !== undefined ? [] : pending;
+    if ((!trimmed && attachments.length === 0 && !opts?.regenerate) || busy) return;
     setBusy(true);
     setError("");
     setInput("");
+    setPending([]);
     setEditing(null);
     setAtBottom(true);
     setMessages((prev) => {
       if (opts?.regenerate) return [...prev.slice(0, -1), { role: "assistant", content: "" }];
       const base = opts?.replaceFrom !== undefined ? prev.slice(0, opts.replaceFrom) : prev;
-      return [...base, { role: "user", content: trimmed }, { role: "assistant", content: "" }];
+      return [
+        ...base,
+        {
+          role: "user",
+          content: trimmed,
+          ...(attachments.length > 0 ? { attachments } : {}),
+        },
+        { role: "assistant", content: "" },
+      ];
     });
 
     const controller = new AbortController();
@@ -432,7 +515,13 @@ function ChatView() {
         body: JSON.stringify(
           opts?.regenerate
             ? { chatId, regenerate: true, model: model ?? undefined }
-            : { chatId, message: trimmed, replaceFrom: opts?.replaceFrom, model: model ?? undefined }
+            : {
+                chatId,
+                message: trimmed,
+                replaceFrom: opts?.replaceFrom,
+                model: model ?? undefined,
+                attachments: attachments.length > 0 ? attachments : undefined,
+              }
         ),
         signal: controller.signal,
       });
@@ -524,10 +613,51 @@ function ChatView() {
         </p>
       )}
       <div
-        className={`flex items-end gap-2 rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] focus-within:border-accent-400/50 ${
+        className={`rounded-2xl border border-slate-900/15 dark:border-white/15 bg-white dark:bg-white/[0.04] focus-within:border-accent-400/50 ${
           empty ? "p-2.5" : "p-2"
         }`}
       >
+        {pending.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-2 pb-2 pt-1">
+            {pending.map((att, i) => (
+              <span
+                key={`${att.name}-${i}`}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-900/10 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-300"
+              >
+                {att.mediaType.startsWith("image/") ? "🖼" : "📎"} {att.name}
+                <button
+                  type="button"
+                  aria-label={`Verwijder ${att.name}`}
+                  onClick={() => setPending((prev) => prev.filter((_, j) => j !== i))}
+                  className="rounded p-0.5 text-slate-400 transition hover:text-red-500 dark:hover:text-red-400"
+                >
+                  <Icon d={ICONS.close} className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex items-end gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.csv"
+          className="hidden"
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          aria-label="Bestand toevoegen"
+          title="Bestand toevoegen (PDF, afbeelding of tekst)"
+          className="shrink-0 rounded-lg p-2.5 text-slate-500 transition hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
+        >
+          <Icon d={ICONS.paperclip} className="h-4.5 w-4.5" />
+        </button>
         <textarea
           ref={inputRef}
           value={input}
@@ -563,13 +693,14 @@ function ChatView() {
         ) : (
           <button
             type="submit"
-            disabled={input.trim().length === 0}
+            disabled={input.trim().length === 0 && pending.length === 0}
             aria-label="Verstuur"
             className="shrink-0 rounded-xl bg-accent-500 px-4 py-2.5 text-sm font-semibold text-accent-950 transition hover:bg-accent-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ↑
           </button>
         )}
+        </div>
       </div>
     </form>
   );

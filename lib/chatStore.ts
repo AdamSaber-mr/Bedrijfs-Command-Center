@@ -3,11 +3,21 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { requireUserId, userRoot } from "./auth";
 
+// Bijlage bij een chatbericht (PDF, afbeelding of tekstbestand), base64
+// opgeslagen zodat het gesprek zelfstandig herleesbaar blijft.
+export interface ChatAttachment {
+  name: string;
+  mediaType: string;
+  data: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   // Tijdstip van het bericht; ontbreekt bij oudere chats
   at?: string;
+  // Bijlagen van de gebruiker (alleen op user-berichten)
+  attachments?: ChatAttachment[];
 }
 
 export interface Chat {

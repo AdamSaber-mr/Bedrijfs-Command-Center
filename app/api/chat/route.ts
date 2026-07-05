@@ -1,7 +1,85 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getChat, newChat, saveChat } from "@/lib/chatStore";
+import { getChat, newChat, saveChat, type ChatAttachment, type ChatMessage } from "@/lib/chatStore";
 import { getSettings } from "@/lib/settings";
 import { MODEL_OPTIONS } from "@/lib/settingsShared";
+
+// Toegestane bijlagetypes en limieten (base64 telt ~33% zwaarder dan het
+// bestand zelf; de API accepteert requests tot 32 MB).
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+const TEXT_TYPES = ["text/plain", "text/markdown", "text/csv"] as const;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // per bestand (na base64)
+const MAX_TOTAL_BYTES = 24 * 1024 * 1024; // per bericht (na base64)
+
+// Valideert en normaliseert bijlagen uit de request body.
+function sanitizeAttachments(input: unknown): ChatAttachment[] | { error: string } {
+  if (input === undefined || input === null) return [];
+  if (!Array.isArray(input)) return { error: "Ongeldige bijlagen" };
+  if (input.length > 5) return { error: "Maximaal 5 bijlagen per bericht." };
+  const result: ChatAttachment[] = [];
+  let total = 0;
+  for (const raw of input) {
+    const { name, mediaType, data } = (raw ?? {}) as Record<string, unknown>;
+    if (typeof name !== "string" || typeof mediaType !== "string" || typeof data !== "string") {
+      return { error: "Ongeldige bijlage" };
+    }
+    const type = mediaType.toLowerCase();
+    const allowed =
+      type === "application/pdf" ||
+      (IMAGE_TYPES as readonly string[]).includes(type) ||
+      (TEXT_TYPES as readonly string[]).includes(type);
+    if (!allowed) {
+      return { error: `Bestandstype ${type} wordt niet ondersteund (PDF, afbeelding of tekst).` };
+    }
+    if (data.length > MAX_ATTACHMENT_BYTES) {
+      return { error: `"${name}" is te groot (max ~7 MB per bestand).` };
+    }
+    total += data.length;
+    if (total > MAX_TOTAL_BYTES) {
+      return { error: "De bijlagen zijn samen te groot voor één bericht." };
+    }
+    result.push({
+      name: name.slice(0, 120),
+      mediaType: type,
+      // Base64 mag geen witruimte/newlines bevatten voor de API.
+      data: data.replace(/\s/g, ""),
+    });
+  }
+  return result;
+}
+
+// Bouwt de API-berichten: tekst blijft een string; berichten met bijlagen
+// worden content blocks (document/afbeelding vóór het tekstblok).
+function toApiMessages(messages: ChatMessage[]): Anthropic.MessageParam[] {
+  return messages.map((m) => {
+    if (m.role !== "user" || !m.attachments?.length) {
+      return { role: m.role, content: m.content };
+    }
+    const blocks: Anthropic.ContentBlockParam[] = [];
+    for (const att of m.attachments) {
+      if (att.mediaType === "application/pdf") {
+        blocks.push({
+          type: "document",
+          source: { type: "base64", media_type: "application/pdf", data: att.data },
+        });
+      } else if ((IMAGE_TYPES as readonly string[]).includes(att.mediaType)) {
+        blocks.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: att.mediaType as (typeof IMAGE_TYPES)[number],
+            data: att.data,
+          },
+        });
+      } else {
+        // Tekstbestand: inhoud decoderen en als tekstblok meesturen.
+        const text = Buffer.from(att.data, "base64").toString("utf-8").slice(0, 200_000);
+        blocks.push({ type: "text", text: `Inhoud van bijlage "${att.name}":\n\n${text}` });
+      }
+    }
+    if (m.content) blocks.push({ type: "text", text: m.content });
+    return { role: m.role, content: blocks };
+  });
+}
 
 export const maxDuration = 300;
 
@@ -59,11 +137,16 @@ async function generateTitle(client: Anthropic, userMessage: string, answer: str
 }
 
 export async function POST(request: Request) {
-  let chatId: unknown, message: unknown, regenerate: unknown, replaceFrom: unknown, model: unknown;
+  let chatId: unknown, message: unknown, regenerate: unknown, replaceFrom: unknown, model: unknown, attachments: unknown;
   try {
-    ({ chatId, message, regenerate, replaceFrom, model } = await request.json());
+    ({ chatId, message, regenerate, replaceFrom, model, attachments } = await request.json());
   } catch {
     return Response.json({ error: "Ongeldige aanvraag" }, { status: 400 });
+  }
+
+  const atts = sanitizeAttachments(attachments);
+  if (!Array.isArray(atts)) {
+    return Response.json({ error: atts.error }, { status: 400 });
   }
 
   let chat;
@@ -80,13 +163,14 @@ export async function POST(request: Request) {
       return Response.json({ error: "Niets om opnieuw te genereren" }, { status: 400 });
     }
   } else {
-    if (typeof message !== "string" || message.trim().length === 0) {
+    const userMessage = typeof message === "string" ? message.trim() : "";
+    // Een bericht mag leeg zijn als er bijlagen zijn ("analyseer dit bestand").
+    if (userMessage.length === 0 && atts.length === 0) {
       return Response.json({ error: "Leeg bericht" }, { status: 400 });
     }
-    const userMessage = message.trim();
     chat =
       (typeof chatId === "string" && (await getChat(chatId))) ||
-      newChat(userMessage);
+      newChat(userMessage || (atts[0] ? `Bijlage: ${atts[0].name}` : "Nieuw gesprek"));
     // Bewerken van een eerder bericht: kap het gesprek af vóór dat bericht,
     // zodat de aangepaste versie en een nieuw antwoord de rest vervangen.
     if (
@@ -101,6 +185,7 @@ export async function POST(request: Request) {
       role: "user",
       content: userMessage,
       at: new Date().toISOString(),
+      ...(atts.length > 0 ? { attachments: atts } : {}),
     });
   }
 
@@ -196,7 +281,7 @@ export async function POST(request: Request) {
         ? {}
         : { thinking: { type: "adaptive" as const } }),
       system,
-      messages: chat.messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: toApiMessages(chat.messages),
     });
 
     // Wacht op het eerste event vóór we een streaming-response starten:
