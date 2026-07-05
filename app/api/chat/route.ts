@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getChat, newChat, saveChat, type ChatAttachment, type ChatMessage } from "@/lib/chatStore";
+import { getProject } from "@/lib/projectStore";
 import { getSettings } from "@/lib/settings";
 import { MODEL_OPTIONS } from "@/lib/settingsShared";
 
@@ -137,9 +138,9 @@ async function generateTitle(client: Anthropic, userMessage: string, answer: str
 }
 
 export async function POST(request: Request) {
-  let chatId: unknown, message: unknown, regenerate: unknown, replaceFrom: unknown, model: unknown, attachments: unknown;
+  let chatId: unknown, message: unknown, regenerate: unknown, replaceFrom: unknown, model: unknown, attachments: unknown, projectId: unknown;
   try {
-    ({ chatId, message, regenerate, replaceFrom, model, attachments } = await request.json());
+    ({ chatId, message, regenerate, replaceFrom, model, attachments, projectId } = await request.json());
   } catch {
     return Response.json({ error: "Ongeldige aanvraag" }, { status: 400 });
   }
@@ -171,6 +172,15 @@ export async function POST(request: Request) {
     chat =
       (typeof chatId === "string" && (await getChat(chatId))) ||
       newChat(userMessage || (atts[0] ? `Bijlage: ${atts[0].name}` : "Nieuw gesprek"));
+    // Nieuwe chat vanuit een projectpagina: koppel aan het project.
+    if (
+      !chat.projectId &&
+      typeof projectId === "string" &&
+      /^[a-zA-Z0-9-]+$/.test(projectId) &&
+      (await getProject(projectId))
+    ) {
+      chat.projectId = projectId;
+    }
     // Bewerken van een eerder bericht: kap het gesprek af vóór dat bericht,
     // zodat de aangepaste versie en een nieuw antwoord de rest vervangen.
     if (
@@ -268,6 +278,15 @@ export async function POST(request: Request) {
   let system = settings.customInstructions
     ? `${basePrompt}\n\nAanvullende instructies van de gebruiker:\n${settings.customInstructions}`
     : basePrompt;
+  // Projectcontext: naam en instructies van het gekoppelde project gaan mee.
+  if (chat.projectId) {
+    const project = await getProject(chat.projectId);
+    if (project) {
+      system = `${system}\n\nDit gesprek hoort bij het project "${project.name}".${
+        project.description ? ` ${project.description}` : ""
+      }${project.instructions ? `\n\nProjectinstructies:\n${project.instructions}` : ""}`;
+    }
+  }
   if (chat.context) {
     system = `${system}\n\n${chat.context}`;
   }

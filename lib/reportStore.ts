@@ -15,6 +15,8 @@ export interface SavedReport {
   createdAt: string;
   report: ResearchReport;
   citations: Citation[];
+  // Project waar dit rapport bij hoort
+  projectId?: string;
 }
 
 export interface ReportSummary {
@@ -23,6 +25,7 @@ export interface ReportSummary {
   createdAt: string;
   marketScore: number;
   fitScore: number;
+  projectId?: string;
 }
 
 // Rapporten worden net als chats als losse JSON-bestanden bewaard, per
@@ -62,6 +65,22 @@ export async function getReport(id: string): Promise<SavedReport | null> {
   }
 }
 
+// Projectkoppeling van een rapport aanpassen (null = ontkoppelen).
+export async function updateReportMeta(
+  id: string,
+  patch: { projectId?: string | null }
+): Promise<SavedReport | null> {
+  const saved = await getReport(id);
+  if (!saved) return null;
+  if (patch.projectId === null) {
+    delete saved.projectId;
+  } else if (typeof patch.projectId === "string" && /^[a-zA-Z0-9-]+$/.test(patch.projectId)) {
+    saved.projectId = patch.projectId;
+  }
+  await fs.writeFile(await fileFor(id), JSON.stringify(saved, null, 2), "utf-8");
+  return saved;
+}
+
 export async function deleteReport(id: string): Promise<void> {
   try {
     await fs.unlink(await fileFor(id));
@@ -76,7 +95,7 @@ export async function listReports(): Promise<ReportSummary[]> {
   const reports = await Promise.all(
     files
       .filter((f) => f.endsWith(".json"))
-      .map(async (f) => {
+      .map(async (f): Promise<ReportSummary | null> => {
         try {
           const saved = JSON.parse(
             await fs.readFile(path.join(dir, f), "utf-8")
@@ -87,6 +106,7 @@ export async function listReports(): Promise<ReportSummary[]> {
             createdAt: saved.createdAt,
             marketScore: saved.report.market_position.score,
             fitScore: saved.report.partnership_fit.score,
+            projectId: saved.projectId,
           };
         } catch {
           return null;

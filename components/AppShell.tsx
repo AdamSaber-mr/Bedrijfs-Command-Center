@@ -149,6 +149,7 @@ function CommandPalette({
       { id: "new-chat", group: "Acties", label: "Nieuwe chat", icon: ICONS.plus, run: go("/chat") },
       { id: "dashboard", group: "Acties", label: "Dashboard", icon: ICONS.dashboard, run: go("/") },
       { id: "chats", group: "Acties", label: "Alle chats", icon: ICONS.chat, run: go("/chats") },
+      { id: "projects", group: "Acties", label: "Projecten", icon: ICONS.folder, run: go("/projecten") },
       { id: "research", group: "Acties", label: "Deal Research", icon: ICONS.research, run: go("/research") },
       { id: "notes", group: "Acties", label: "Notities", icon: ICONS.note, run: go("/notes") },
       { id: "customize", group: "Acties", label: "Aanpassen", icon: ICONS.sparkle, run: go("/aanpassen") },
@@ -699,6 +700,14 @@ function Sidebar({
           icon={ICONS.chat}
           label="Chats"
           active={pathname === "/chats"}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+        <NavLink
+          href="/projecten"
+          icon={ICONS.folder}
+          label="Projecten"
+          active={pathname === "/projecten"}
           collapsed={collapsed}
           onNavigate={onNavigate}
         />

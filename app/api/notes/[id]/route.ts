@@ -18,7 +18,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  let body: { title?: unknown; content?: unknown };
+  let body: { title?: unknown; content?: unknown; projectId?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -27,6 +27,10 @@ export async function PUT(
   const note = await updateNote(id, {
     title: typeof body.title === "string" ? body.title : undefined,
     content: typeof body.content === "string" ? body.content : undefined,
+    projectId:
+      body.projectId === null || typeof body.projectId === "string"
+        ? body.projectId
+        : undefined,
   });
   if (!note) {
     return NextResponse.json({ error: "Notitie niet gevonden" }, { status: 404 });

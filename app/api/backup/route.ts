@@ -3,6 +3,7 @@ import { allChats, type Chat } from "@/lib/chatStore";
 import { getReport, listReports, type SavedReport } from "@/lib/reportStore";
 import { allNotes, type Note } from "@/lib/noteStore";
 import { listPrompts, addPrompt, type PromptTemplate } from "@/lib/promptStore";
+import { getProject, listProjects, type Project } from "@/lib/projectStore";
 import { getSettings, saveSettings } from "@/lib/settings";
 import { requireUserId, userRoot } from "@/lib/auth";
 import { promises as fs } from "fs";
@@ -15,6 +16,11 @@ export async function GET() {
     await Promise.all(reportSummaries.map((s) => getReport(s.id)))
   ).filter((r): r is SavedReport => r !== null);
 
+  const projectSummaries = await listProjects();
+  const projects = (
+    await Promise.all(projectSummaries.map((s) => getProject(s.id)))
+  ).filter((p): p is Project => p !== null);
+
   const backup = {
     app: "bedrijfs-command-center",
     version: 1,
@@ -24,6 +30,7 @@ export async function GET() {
     reports,
     notes: await allNotes(),
     prompts: await listPrompts(),
+    projects,
   };
 
   return new Response(JSON.stringify(backup, null, 2), {
@@ -44,6 +51,7 @@ export async function POST(request: Request) {
     notes?: unknown;
     prompts?: unknown;
     settings?: unknown;
+    projects?: unknown;
   };
   try {
     backup = await request.json();
@@ -58,7 +66,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const counts = { chats: 0, reports: 0, notes: 0, prompts: 0 };
+  const counts = { chats: 0, reports: 0, notes: 0, prompts: 0, projects: 0 };
   // Alles onder de map van de ingelogde gebruiker (data/users/<id>/…).
   const root = userRoot(await requireUserId());
 
@@ -105,6 +113,21 @@ export async function POST(request: Request) {
           "utf-8"
         );
         counts.notes++;
+      }
+    }
+  }
+
+  if (Array.isArray(backup.projects)) {
+    const dir = path.join(root, "projects");
+    await fs.mkdir(dir, { recursive: true });
+    for (const project of backup.projects as Project[]) {
+      if (project?.id && /^[a-zA-Z0-9-]+$/.test(project.id) && typeof project.name === "string") {
+        await fs.writeFile(
+          path.join(dir, `${project.id}.json`),
+          JSON.stringify(project, null, 2),
+          "utf-8"
+        );
+        counts.projects++;
       }
     }
   }

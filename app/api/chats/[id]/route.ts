@@ -19,7 +19,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  let body: { title?: unknown; pinned?: unknown };
+  let body: { title?: unknown; pinned?: unknown; projectId?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -28,6 +28,10 @@ export async function PATCH(
   const chat = await updateChatMeta(id, {
     title: typeof body.title === "string" ? body.title : undefined,
     pinned: typeof body.pinned === "boolean" ? body.pinned : undefined,
+    projectId:
+      body.projectId === null || typeof body.projectId === "string"
+        ? body.projectId
+        : undefined,
   });
   if (!chat) {
     return NextResponse.json({ error: "Chat niet gevonden" }, { status: 404 });

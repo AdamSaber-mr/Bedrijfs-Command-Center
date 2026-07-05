@@ -9,12 +9,15 @@ export interface Note {
   content: string;
   createdAt: string;
   updatedAt: string;
+  // Project waar deze notitie bij hoort
+  projectId?: string;
 }
 
 export interface NoteSummary {
   id: string;
   title: string;
   updatedAt: string;
+  projectId?: string;
 }
 
 // Notities als losse JSON-bestanden, per gebruiker in data/users/<id>/notes/.
@@ -35,12 +38,17 @@ export async function listNotes(): Promise<NoteSummary[]> {
   const notes = await Promise.all(
     files
       .filter((f) => f.endsWith(".json"))
-      .map(async (f) => {
+      .map(async (f): Promise<NoteSummary | null> => {
         try {
           const note = JSON.parse(
             await fs.readFile(path.join(dir, f), "utf-8")
           ) as Note;
-          return { id: note.id, title: note.title, updatedAt: note.updatedAt };
+          return {
+            id: note.id,
+            title: note.title,
+            updatedAt: note.updatedAt,
+            projectId: note.projectId,
+          };
         } catch {
           return null;
         }
@@ -79,12 +87,17 @@ export async function saveNote(note: Note): Promise<void> {
 
 export async function updateNote(
   id: string,
-  patch: { title?: string; content?: string }
+  patch: { title?: string; content?: string; projectId?: string | null }
 ): Promise<Note | null> {
   const note = await getNote(id);
   if (!note) return null;
   if (typeof patch.title === "string") note.title = patch.title.slice(0, 120) || "Zonder titel";
   if (typeof patch.content === "string") note.content = patch.content.slice(0, 100_000);
+  if (patch.projectId === null) {
+    delete note.projectId;
+  } else if (typeof patch.projectId === "string" && /^[a-zA-Z0-9-]+$/.test(patch.projectId)) {
+    note.projectId = patch.projectId;
+  }
   await saveNote(note);
   return note;
 }

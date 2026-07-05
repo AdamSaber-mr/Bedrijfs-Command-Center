@@ -33,6 +33,8 @@ export interface Chat {
   pinned?: boolean;
   // Per-chat modelkeuze; ontbreekt = de standaard uit Instellingen
   model?: string;
+  // Project waar deze chat bij hoort (instructies gaan mee als context)
+  projectId?: string;
 }
 
 export interface ChatSummary {
@@ -41,6 +43,7 @@ export interface ChatSummary {
   updatedAt: string;
   messageCount: number;
   pinned: boolean;
+  projectId?: string;
 }
 
 // Chats worden als losse JSON-bestanden bewaard, per gebruiker in
@@ -64,7 +67,7 @@ export async function listChats(): Promise<ChatSummary[]> {
   const chats = await Promise.all(
     files
       .filter((f) => f.endsWith(".json"))
-      .map(async (f) => {
+      .map(async (f): Promise<ChatSummary | null> => {
         try {
           const chat = JSON.parse(
             await fs.readFile(path.join(dir, f), "utf-8")
@@ -75,6 +78,7 @@ export async function listChats(): Promise<ChatSummary[]> {
             updatedAt: chat.updatedAt,
             messageCount: chat.messages.length,
             pinned: chat.pinned === true,
+            projectId: chat.projectId,
           };
         } catch {
           return null;
@@ -114,7 +118,7 @@ export async function saveChat(chat: Chat): Promise<void> {
 // niet onbedoeld naar boven springt in de datumgroepen.
 export async function updateChatMeta(
   id: string,
-  patch: { title?: string; pinned?: boolean }
+  patch: { title?: string; pinned?: boolean; projectId?: string | null }
 ): Promise<Chat | null> {
   const chat = await getChat(id);
   if (!chat) return null;
@@ -123,6 +127,11 @@ export async function updateChatMeta(
   }
   if (typeof patch.pinned === "boolean") {
     chat.pinned = patch.pinned;
+  }
+  if (patch.projectId === null) {
+    delete chat.projectId;
+  } else if (typeof patch.projectId === "string" && /^[a-zA-Z0-9-]+$/.test(patch.projectId)) {
+    chat.projectId = patch.projectId;
   }
   await fs.writeFile(await fileFor(chat.id), JSON.stringify(chat, null, 2), "utf-8");
   return chat;

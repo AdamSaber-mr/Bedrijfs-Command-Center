@@ -362,6 +362,8 @@ function ChatView() {
   const chatId = searchParams.get("chat");
   const initialQuestion = searchParams.get("q");
   const draft = searchParams.get("draft");
+  // Vanuit een projectpagina gestart: nieuwe chats aan dit project koppelen.
+  const projectParam = searchParams.get("project");
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -521,6 +523,7 @@ function ChatView() {
                 replaceFrom: opts?.replaceFrom,
                 model: model ?? undefined,
                 attachments: attachments.length > 0 ? attachments : undefined,
+                projectId: !chatId && projectParam ? projectParam : undefined,
               }
         ),
         signal: controller.signal,
