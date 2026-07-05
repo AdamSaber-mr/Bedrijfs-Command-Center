@@ -3,6 +3,10 @@ import path from "path";
 import { randomUUID } from "crypto";
 import { requireUserId, userRoot } from "./auth";
 
+// Dealfases voor de pipeline-weergave op de projectenpagina.
+export const PROJECT_STAGES = ["verkennen", "in_gesprek", "deal", "afgewezen"] as const;
+export type ProjectStage = (typeof PROJECT_STAGES)[number];
+
 // Projecten bundelen chats, notities en rapporten rond één deal/bedrijf,
 // met eigen instructies die als extra context in projectchats meegaan.
 export interface Project {
@@ -12,6 +16,8 @@ export interface Project {
   instructions: string;
   createdAt: string;
   updatedAt: string;
+  // Dealfase; ontbreekt bij oudere projecten = "verkennen"
+  stage?: ProjectStage;
 }
 
 export interface ProjectSummary {
@@ -19,6 +25,7 @@ export interface ProjectSummary {
   name: string;
   description: string;
   updatedAt: string;
+  stage: ProjectStage;
 }
 
 async function projectsDir(): Promise<string> {
@@ -46,6 +53,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
             name: p.name,
             description: p.description,
             updatedAt: p.updatedAt,
+            stage: p.stage && PROJECT_STAGES.includes(p.stage) ? p.stage : "verkennen",
           };
         } catch {
           return null;
@@ -81,7 +89,7 @@ export async function createProject(name: string, description = ""): Promise<Pro
 
 export async function updateProject(
   id: string,
-  patch: { name?: string; description?: string; instructions?: string }
+  patch: { name?: string; description?: string; instructions?: string; stage?: string }
 ): Promise<Project | null> {
   const project = await getProject(id);
   if (!project) return null;
@@ -93,6 +101,12 @@ export async function updateProject(
   }
   if (typeof patch.instructions === "string") {
     project.instructions = patch.instructions.slice(0, 4000);
+  }
+  if (
+    typeof patch.stage === "string" &&
+    PROJECT_STAGES.includes(patch.stage as ProjectStage)
+  ) {
+    project.stage = patch.stage as ProjectStage;
   }
   project.updatedAt = new Date().toISOString();
   await fs.writeFile(await fileFor(id), JSON.stringify(project, null, 2), "utf-8");

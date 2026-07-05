@@ -201,7 +201,9 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
   const [openingChat, setOpeningChat] = useState(false);
   const report = saved.report;
 
-  async function chatAboutReport() {
+  // Start een chat met het rapport als context; met `draft` staat de
+  // vervolgvraag alvast klaar in het invoerveld (gebruiker verstuurt zelf).
+  async function chatAboutReport(draft?: string) {
     if (openingChat) return;
     setOpeningChat(true);
     try {
@@ -212,7 +214,9 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      router.push(`/chat?chat=${data.chatId}`);
+      router.push(
+        `/chat?chat=${data.chatId}${draft ? `&draft=${encodeURIComponent(draft)}` : ""}`
+      );
     } catch {
       setOpeningChat(false);
     }
@@ -272,7 +276,7 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
               ⎙ Opslaan als PDF
             </button>
             <button
-              onClick={chatAboutReport}
+              onClick={() => chatAboutReport()}
               disabled={openingChat}
               className="rounded-lg border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 px-4 py-2 text-sm font-medium text-accent-700 dark:text-accent-300 transition hover:bg-accent-500/20 disabled:opacity-50"
             >
@@ -376,6 +380,47 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
           Strategische conclusie
         </p>
         <p className="mt-3 text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">{report.conclusion}</p>
+      </section>
+
+      {/* Vervolgacties: van inzicht naar actie — start een chat met het
+          rapport als context en de vervolgvraag alvast ingevuld. */}
+      <section className="print:hidden">
+        <p className="mb-2.5 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Volgende stap
+        </p>
+        <div className="flex flex-wrap gap-2.5">
+          {[
+            {
+              icon: "✉️",
+              label: "Outreach-mail schrijven",
+              draft: `Schrijf een korte, persoonlijke outreach-mail aan ${report.company.name} om een eerste gesprek voor te stellen. Gebruik de partnership-kansen en sterktes uit het rapport, houd het onder de 150 woorden en vermijd verkooppraat.`,
+            },
+            {
+              icon: "🎯",
+              label: "Gesprek voorbereiden",
+              draft: `Bereid een eerste gesprek met ${report.company.name} voor op basis van dit rapport: een korte agenda, onze drie sterkste aanknopingspunten, de bezwaren die zij waarschijnlijk opwerpen (met reactie) en de vragen die wij moeten stellen.`,
+            },
+            {
+              icon: "❓",
+              label: "Kritische vragen",
+              draft: `Welke tien kritische due-diligence-vragen moeten we ${report.company.name} stellen vóór we verdergaan? Baseer je op de risico's en onzekerheden in het rapport, van belangrijkst naar minst belangrijk.`,
+            },
+            {
+              icon: "⚖️",
+              label: "Vergelijk met concurrent",
+              draft: `Vergelijk ${report.company.name} als potentiële partner met [vul hier de concurrent in]: marktpositie, partnership-fit, risico's en welke van de twee wij zouden moeten kiezen.`,
+            },
+          ].map((action) => (
+            <button
+              key={action.label}
+              onClick={() => chatAboutReport(action.draft)}
+              disabled={openingChat}
+              className="rounded-xl border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:-translate-y-0.5 hover:border-accent-400/50 hover:text-slate-900 dark:hover:text-white disabled:opacity-50"
+            >
+              {action.icon} {action.label}
+            </button>
+          ))}
+        </div>
       </section>
 
       {/* Bronnen */}

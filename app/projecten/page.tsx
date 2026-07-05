@@ -16,6 +16,52 @@ function relativeDate(iso: string) {
   return new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
 }
 
+// Dealfases van de pipeline (client-kopie van PROJECT_STAGES — de store
+// zelf importeert Node-modules en kan niet in de client-bundel).
+const STAGES = [
+  {
+    id: "verkennen",
+    label: "Verkennen",
+    badge:
+      "bg-slate-500/10 text-slate-600 border-slate-500/20 dark:text-slate-300 dark:border-white/15",
+    dot: "#64748b",
+  },
+  {
+    id: "in_gesprek",
+    label: "In gesprek",
+    badge:
+      "bg-amber-500/10 text-amber-700 border-amber-600/30 dark:text-amber-300 dark:border-amber-500/30",
+    dot: "#d97706",
+  },
+  {
+    id: "deal",
+    label: "Deal",
+    badge:
+      "bg-accent-500/10 text-accent-700 border-accent-600/30 dark:text-accent-300 dark:border-accent-500/30",
+    dot: "var(--accent-600)",
+  },
+  {
+    id: "afgewezen",
+    label: "Afgewezen",
+    badge:
+      "bg-red-500/10 text-red-700 border-red-600/30 dark:text-red-300 dark:border-red-500/30",
+    dot: "#dc2626",
+  },
+] as const;
+type StageId = (typeof STAGES)[number]["id"];
+
+function StageBadge({ stage }: { stage: StageId }) {
+  const s = STAGES.find((x) => x.id === stage) ?? STAGES[0];
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${s.badge}`}
+    >
+      <span aria-hidden className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: s.dot }} />
+      {s.label}
+    </span>
+  );
+}
+
 /* ---------- Overzicht ---------- */
 
 function ProjectList() {
@@ -111,36 +157,54 @@ function ProjectList() {
         </div>
       )}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        {projects === null && (
-          <p className="text-sm text-slate-400 dark:text-slate-500">Laden…</p>
-        )}
-        {projects !== null && projects.length === 0 && !showForm && (
-          <p className="col-span-full rounded-xl border border-dashed border-slate-900/15 px-4 py-10 text-center text-sm text-slate-400 dark:border-white/15 dark:text-slate-500">
-            Nog geen projecten. Maak er hierboven één aan.
-          </p>
-        )}
-        {projects?.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => router.push(`/projecten?project=${p.id}`)}
-            className="group rounded-2xl border border-slate-900/10 bg-white p-5 text-left transition hover:border-accent-400/50 hover:shadow-lg hover:shadow-slate-900/5 dark:border-white/10 dark:bg-white/[0.03] dark:hover:shadow-black/20"
-          >
-            <span className="flex items-center gap-2.5">
-              <Icon d={ICONS.folder} className="h-5 w-5 text-accent-600 dark:text-accent-400" />
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {p.name}
-              </span>
-            </span>
-            <span className="mt-2 line-clamp-2 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-              {p.description || "Geen omschrijving"}
-            </span>
-            <span className="mt-3 block text-[11px] text-slate-400 dark:text-slate-600">
-              Bijgewerkt {relativeDate(p.updatedAt)}
-            </span>
-          </button>
-        ))}
-      </div>
+      {projects === null && (
+        <p className="mt-6 text-sm text-slate-400 dark:text-slate-500">Laden…</p>
+      )}
+      {projects !== null && projects.length === 0 && !showForm && (
+        <p className="mt-6 rounded-xl border border-dashed border-slate-900/15 px-4 py-10 text-center text-sm text-slate-400 dark:border-white/15 dark:text-slate-500">
+          Nog geen projecten. Maak er hierboven één aan.
+        </p>
+      )}
+
+      {/* Pipeline: projecten gegroepeerd per dealfase */}
+      {STAGES.map((stage) => {
+        const inStage = (projects ?? []).filter((p) => (p.stage ?? "verkennen") === stage.id);
+        if (inStage.length === 0) return null;
+        return (
+          <div key={stage.id} className="mt-7">
+            <div className="flex items-center gap-2">
+              <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: stage.dot }} />
+              <h2 className="text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                {stage.label}
+                <span className="ml-1.5 tabular-nums">({inStage.length})</span>
+              </h2>
+            </div>
+            <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
+              {inStage.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => router.push(`/projecten?project=${p.id}`)}
+                  className="group rounded-2xl border border-slate-900/10 bg-white p-5 text-left transition hover:border-accent-400/50 hover:shadow-lg hover:shadow-slate-900/5 dark:border-white/10 dark:bg-white/[0.03] dark:hover:shadow-black/20"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Icon d={ICONS.folder} className="h-5 w-5 shrink-0 text-accent-600 dark:text-accent-400" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {p.name}
+                    </span>
+                    <StageBadge stage={(p.stage ?? "verkennen") as StageId} />
+                  </span>
+                  <span className="mt-2 line-clamp-2 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    {p.description || "Geen omschrijving"}
+                  </span>
+                  <span className="mt-3 block text-[11px] text-slate-400 dark:text-slate-600">
+                    Bijgewerkt {relativeDate(p.updatedAt)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -244,6 +308,7 @@ function ProjectDetail({ id }: { id: string }) {
     reports: ReportSummary[];
   }>({ chats: [], notes: [], reports: [] });
   const [instructions, setInstructions] = useState("");
+  const [stage, setStage] = useState<StageId>("verkennen");
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [missing, setMissing] = useState(false);
@@ -263,6 +328,7 @@ function ProjectDetail({ id }: { id: string }) {
       const data = (await detailRes.json()) as Detail;
       setDetail(data);
       setInstructions(data.project.instructions);
+      setStage((data.project.stage as StageId) ?? "verkennen");
       setAll({
         chats: (await chatsRes.json()).chats ?? [],
         notes: (await notesRes.json()).notes ?? [],
@@ -283,6 +349,17 @@ function ProjectDetail({ id }: { id: string }) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ instructions }),
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function changeStage(next: StageId) {
+    setStage(next);
+    await fetch(`/api/projects/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage: next }),
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -363,6 +440,28 @@ function ProjectDetail({ id }: { id: string }) {
               {detail.project.description}
             </p>
           )}
+          {/* Dealfase-kiezer */}
+          <div className="mt-3 flex w-fit rounded-lg border border-slate-900/10 p-0.5 dark:border-white/10">
+            {STAGES.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => changeStage(s.id)}
+                aria-pressed={stage === s.id}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
+                  stage === s.id
+                    ? "bg-slate-900/[0.07] text-slate-900 dark:bg-white/10 dark:text-white"
+                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: s.dot, opacity: stage === s.id ? 1 : 0.45 }}
+                />
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
         <button
           onClick={() => router.push(`/chat?project=${id}`)}

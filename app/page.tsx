@@ -411,13 +411,21 @@ function DashboardView() {
           </div>
           <div className="mt-3 space-y-2">
             {reports !== null && reports.length === 0 && (
-              <p className="rounded-xl border border-dashed border-slate-900/15 dark:border-white/15 px-4 py-6 text-center text-sm text-slate-500">
-                Nog geen analyses —{" "}
-                <Link href="/research" className="text-accent-700 dark:text-accent-300 hover:underline">
-                  start je eerste deal-onderzoek
+              <div className="rounded-xl border border-dashed border-slate-900/15 dark:border-white/15 px-5 py-7 text-center">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Onderzoek je eerste bedrijf
+                </p>
+                <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                  Bedrijfsnaam in, gestructureerd deal-rapport uit — met scores,
+                  concurrenten, risico&apos;s en bronnen. Klaar in enkele minuten.
+                </p>
+                <Link
+                  href="/research"
+                  className="mt-4 inline-block rounded-xl bg-accent-500 px-4 py-2 text-sm font-semibold text-accent-950 transition hover:bg-accent-400 active:scale-95"
+                >
+                  Start deal-onderzoek →
                 </Link>
-                .
-              </p>
+              </div>
             )}
             {(reports ?? []).slice(0, 6).map((report, i) => (
               <Link

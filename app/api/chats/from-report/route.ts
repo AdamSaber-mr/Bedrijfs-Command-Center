@@ -30,6 +30,8 @@ export async function POST(request: Request) {
     createdAt: now,
     updatedAt: now,
     messages: [],
+    // Zit het rapport in een project, dan hoort deze chat daar ook bij.
+    ...(saved.projectId ? { projectId: saved.projectId } : {}),
     context: `De gebruiker bespreekt een eerder gegenereerd due-diligence-rapport over "${company}" (gemaakt op ${saved.createdAt.slice(0, 10)}). Gebruik dit rapport als feitelijke basis voor je antwoorden:\n\n${JSON.stringify(saved.report, null, 2)}${
       saved.citations.length
         ? `\n\nGebruikte bronnen:\n${saved.citations.map((c) => `- ${c.title} (${c.url})`).join("\n")}`

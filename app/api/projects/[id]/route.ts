@@ -32,7 +32,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  let body: { name?: unknown; description?: unknown; instructions?: unknown };
+  let body: { name?: unknown; description?: unknown; instructions?: unknown; stage?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -42,6 +42,7 @@ export async function PATCH(
     name: typeof body.name === "string" ? body.name : undefined,
     description: typeof body.description === "string" ? body.description : undefined,
     instructions: typeof body.instructions === "string" ? body.instructions : undefined,
+    stage: typeof body.stage === "string" ? body.stage : undefined,
   });
   if (!project) {
     return NextResponse.json({ error: "Project niet gevonden" }, { status: 404 });
