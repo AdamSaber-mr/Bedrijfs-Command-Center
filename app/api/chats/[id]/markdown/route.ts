@@ -14,7 +14,7 @@ export async function GET(
   const lines: string[] = [
     `# ${chat.title}`,
     "",
-    `_Geëxporteerd uit Bedrijfs Command Center · ${new Date(chat.createdAt).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" })}_`,
+    `_Geëxporteerd uit Vantage · ${new Date(chat.createdAt).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" })}_`,
     "",
   ];
   for (const m of chat.messages) {

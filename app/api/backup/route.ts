@@ -53,7 +53,7 @@ export async function POST(request: Request) {
 
   if (backup.app !== "bedrijfs-command-center") {
     return NextResponse.json(
-      { error: "Dit is geen back-up van het Bedrijfs Command Center" },
+      { error: "Dit is geen Vantage-back-up" },
       { status: 400 }
     );
   }
