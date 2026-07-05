@@ -45,6 +45,15 @@ export const ICONS = {
   sparkle: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3zM19 17l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2",
   database:
     "M4 5c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
+  panel: "M4 5h16v14H4zM9 5v14",
+  sliders: "M4 6h10M18 6h2M13 4v4M4 12h3M11 12h9M7 10v4M4 18h9M17 18h3M13 16v4",
+  chevronUpDown: "M8 9l4-4 4 4M8 15l4 4 4-4",
+  dots: "M12 5.5h.01M12 12h.01M12 18.5h.01",
+  cog: "M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 13a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z",
+  trash: "M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6",
+  keyboard:
+    "M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M18 10h.01M7 14h10",
+  logout: "M9 4H6a2 2 0 00-2 2v12a2 2 0 002 2h3M16 17l5-5-5-5M21 12H9",
 };
 
 /* ---------- Thema ---------- */
@@ -91,7 +100,7 @@ export function applyThemeMode(mode: ThemeMode) {
   window.dispatchEvent(new Event(THEME_MODE_EVENT));
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   const mode = useSyncExternalStore(subscribeThemeMode, getThemeMode, () => "system");
 
   return (
@@ -107,14 +116,18 @@ export function ThemeToggle() {
           key={option.value}
           onClick={() => applyThemeMode(option.value)}
           aria-pressed={mode === option.value}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition ${
+          aria-label={option.label}
+          title={compact ? option.label : undefined}
+          className={`flex items-center justify-center rounded-md font-medium transition ${
+            compact ? "h-7 w-8" : "flex-1 gap-1.5 px-2 py-1.5 text-xs"
+          } ${
             mode === option.value
               ? "bg-accent-500/15 text-accent-700 dark:text-accent-300"
               : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
           }`}
         >
           <Icon d={option.icon} className="h-3.5 w-3.5" />
-          {option.label}
+          {!compact && option.label}
         </button>
       ))}
     </div>

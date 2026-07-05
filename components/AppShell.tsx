@@ -16,7 +16,6 @@ import { CHATS_UPDATED_EVENT, REPORTS_UPDATED_EVENT } from "@/lib/events";
 import {
   Icon,
   ICONS,
-  ThemeToggle,
   applyThemeMode,
   currentTheme,
   getThemeMode,
@@ -27,22 +26,29 @@ import SettingsModal, { type SettingsTab } from "@/components/SettingsModal";
 export { CHATS_UPDATED_EVENT, REPORTS_UPDATED_EVENT } from "@/lib/events";
 export { ThemeToggle } from "@/components/ui";
 
+// Tekst-woordmerk in Claude-stijl: geen icoon-blokje, alleen de naam in de
+// display-serif. Ingeklapt tonen we alleen de initiaal.
 function Logo({ compact = false }: { compact?: boolean }) {
-  return (
-    <span className="flex items-center gap-2.5">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent-400 to-accent-600 transition-transform duration-200 hover:scale-105 active:scale-95">
-        <svg viewBox="0 0 24 24" fill="white" className="h-4.5 w-4.5" aria-hidden>
-          <path d="M13 2 4.5 13.5h5L11 22l8.5-11.5h-5L13 2z" />
-        </svg>
+  if (compact) {
+    return (
+      <span className="font-[family-name:var(--font-display)] text-2xl font-semibold leading-none tracking-tight text-slate-900 dark:text-white">
+        V
       </span>
-      {!compact && (
-        <span className="font-[family-name:var(--font-display)] text-sm font-bold leading-tight tracking-wide text-slate-900 dark:text-white">
-          Bedrijfs
-          <span className="block text-accent-600 dark:text-accent-400">Command Center</span>
-        </span>
-      )}
+    );
+  }
+  return (
+    <span className="font-[family-name:var(--font-display)] text-[22px] font-semibold leading-none tracking-tight text-slate-900 dark:text-white">
+      Vantage
     </span>
   );
+}
+
+// Initialen voor de account-avatar, afgeleid van de opgegeven naam.
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 /* ---------- Helpers ---------- */
@@ -138,8 +144,10 @@ function CommandPalette({
     const actions: PaletteItem[] = [
       { id: "new-chat", group: "Acties", label: "Nieuwe chat", icon: ICONS.plus, run: go("/chat") },
       { id: "dashboard", group: "Acties", label: "Dashboard", icon: ICONS.dashboard, run: go("/") },
+      { id: "chats", group: "Acties", label: "Alle chats", icon: ICONS.chat, run: go("/chats") },
       { id: "research", group: "Acties", label: "Deal Research", icon: ICONS.research, run: go("/research") },
       { id: "notes", group: "Acties", label: "Notities", icon: ICONS.note, run: go("/notes") },
+      { id: "customize", group: "Acties", label: "Aanpassen", icon: ICONS.sparkle, run: go("/aanpassen") },
       {
         id: "archive",
         group: "Acties",
@@ -352,6 +360,40 @@ function CommandPalette({
 
 /* ---------- Sidebar ---------- */
 
+// Rij in een dropdown-menu (chat-opties en account-menu).
+function MenuItem({
+  icon,
+  label,
+  onClick,
+  danger = false,
+  hint,
+}: {
+  icon: string;
+  label: string;
+  onClick: (e: React.MouseEvent) => void;
+  danger?: boolean;
+  hint?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition ${
+        danger
+          ? "text-red-600 hover:bg-red-500/10 dark:text-red-400"
+          : "text-slate-700 hover:bg-slate-900/5 dark:text-slate-300 dark:hover:bg-white/5"
+      }`}
+    >
+      <Icon d={icon} className="h-4 w-4 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {hint && (
+        <kbd className="shrink-0 text-xs tracking-wide text-slate-400 dark:text-slate-500">
+          {hint}
+        </kbd>
+      )}
+    </button>
+  );
+}
+
 function NavLink({
   href,
   icon,
@@ -392,10 +434,14 @@ function Sidebar({
   collapsed,
   width = DEFAULT_SIDEBAR_WIDTH,
   resizing = false,
+  userName,
+  userEmail,
   onToggleCollapse,
   onNavigate,
   onOpenPalette,
   onOpenSettings,
+  onOpenShortcuts,
+  onLogout,
   refreshChats,
   refreshReports,
 }: {
@@ -404,10 +450,14 @@ function Sidebar({
   collapsed: boolean;
   width?: number;
   resizing?: boolean;
+  userName: string;
+  userEmail: string;
   onToggleCollapse?: () => void;
   onNavigate?: () => void;
   onOpenPalette: () => void;
   onOpenSettings: () => void;
+  onOpenShortcuts: () => void;
+  onLogout: () => void;
   refreshChats: () => void;
   refreshReports: () => void;
 }) {
@@ -419,6 +469,10 @@ function Sidebar({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const skipCommitRef = useRef(false);
+  // ⋮-menu per chat, per rapport en het account-menu onderaan.
+  const [menuChatId, setMenuChatId] = useState<string | null>(null);
+  const [menuReportId, setMenuReportId] = useState<string | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   async function removeChat(id: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -504,55 +558,76 @@ function Sidebar({
         </div>
       );
     }
+    const active = activeChatId === chat.id && pathname === "/chat";
+    const menuOpen = menuChatId === chat.id;
     return (
-      <button
+      <div
         key={chat.id}
-        onClick={() => {
-          router.push(`/chat?chat=${chat.id}`);
-          onNavigate?.();
-        }}
         style={{ animationDelay: `${Math.min(index * 25, 200)}ms` }}
-        className={`animate-slide-in group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
-          activeChatId === chat.id && pathname === "/chat"
+        className={`animate-slide-in group relative flex items-center rounded-lg text-sm transition ${
+          active || menuOpen
             ? "bg-slate-900/10 text-slate-900 dark:bg-white/10 dark:text-white"
             : "text-slate-600 hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
         }`}
       >
-        <span className="min-w-0 flex-1 truncate">{chat.title}</span>
-        <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
-          <span
-            role="button"
-            aria-label={chat.pinned ? "Losmaken" : "Vastpinnen"}
-            title={chat.pinned ? "Losmaken" : "Vastpinnen"}
-            onClick={(e) => togglePin(chat, e)}
-            className={`rounded p-0.5 ${
-              chat.pinned
-                ? "text-accent-600 dark:text-accent-400"
-                : "text-slate-500 hover:text-accent-600 dark:hover:text-accent-300"
-            }`}
-          >
-            <Icon d={ICONS.pin} className="h-3.5 w-3.5" />
-          </span>
-          <span
-            role="button"
-            aria-label="Hernoem chat"
-            title="Hernoemen"
-            onClick={(e) => startRename(chat, e)}
-            className="rounded p-0.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-          >
-            <Icon d={ICONS.pencil} className="h-3.5 w-3.5" />
-          </span>
-          <span
-            role="button"
-            aria-label="Verwijder chat"
-            title="Verwijderen"
-            onClick={(e) => removeChat(chat.id, e)}
-            className="rounded p-0.5 text-slate-500 hover:text-red-500 dark:hover:text-red-400"
-          >
-            <Icon d={ICONS.close} className="h-3.5 w-3.5" />
-          </span>
-        </span>
-      </button>
+        <button
+          onClick={() => {
+            router.push(`/chat?chat=${chat.id}`);
+            onNavigate?.();
+          }}
+          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
+        >
+          {chat.pinned && (
+            <Icon d={ICONS.pin} className="h-3 w-3 shrink-0 text-accent-600 dark:text-accent-400" />
+          )}
+          <span className="min-w-0 flex-1 truncate">{chat.title}</span>
+        </button>
+        <button
+          aria-label="Chatopties"
+          title="Opties"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMenuChatId(menuOpen ? null : chat.id);
+          }}
+          className={`mr-1 shrink-0 rounded p-1 text-slate-500 transition hover:text-slate-900 dark:hover:text-white ${
+            menuOpen ? "flex" : "hidden group-hover:flex"
+          }`}
+        >
+          <Icon d={ICONS.dots} className="h-4 w-4" />
+        </button>
+        {menuOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenuChatId(null)} />
+            <div className="animate-scale-in absolute right-1 top-9 z-50 w-44 overflow-hidden rounded-xl border border-slate-900/10 bg-white p-1 shadow-xl shadow-slate-900/20 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/60">
+              <MenuItem
+                icon={ICONS.pin}
+                label={chat.pinned ? "Losmaken" : "Vastpinnen"}
+                onClick={(e) => {
+                  setMenuChatId(null);
+                  togglePin(chat, e);
+                }}
+              />
+              <MenuItem
+                icon={ICONS.pencil}
+                label="Hernoemen"
+                onClick={(e) => {
+                  setMenuChatId(null);
+                  startRename(chat, e);
+                }}
+              />
+              <MenuItem
+                icon={ICONS.trash}
+                label="Verwijderen"
+                danger
+                onClick={(e) => {
+                  setMenuChatId(null);
+                  removeChat(chat.id, e);
+                }}
+              />
+            </div>
+          </>
+        )}
+      </div>
     );
   };
 
@@ -563,43 +638,48 @@ function Sidebar({
         resizing ? "" : "transition-[width] duration-200"
       }`}
     >
-      <div className={`flex items-center pt-5 ${collapsed ? "justify-center px-0 pb-3" : "justify-between px-4 pb-2"}`}>
+      {/* Kop: tekst-woordmerk met zoek- en inklap-icoon (Claude-stijl) */}
+      <div className={`flex items-center pt-5 ${collapsed ? "flex-col gap-2 px-0 pb-3" : "justify-between px-4 pb-3"}`}>
         <Link href="/" onClick={onNavigate} aria-label="Dashboard">
           <Logo compact={collapsed} />
         </Link>
-        {onToggleCollapse && !collapsed && (
+        <div className={`flex items-center gap-0.5 ${collapsed ? "flex-col" : ""}`}>
           <button
-            onClick={onToggleCollapse}
-            aria-label="Sidebar inklappen"
-            className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-700 dark:hover:bg-white/5 dark:hover:text-slate-200"
+            onClick={onOpenPalette}
+            aria-label="Zoeken"
+            title="Zoeken (⌘K)"
+            className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-100"
           >
-            <Icon d={ICONS.chevronLeft} className="h-4 w-4" />
+            <Icon d={ICONS.search} className="h-[18px] w-[18px]" />
           </button>
-        )}
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              aria-label={collapsed ? "Sidebar uitklappen" : "Sidebar inklappen"}
+              title={collapsed ? "Sidebar uitklappen" : "Sidebar inklappen"}
+              className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-100"
+            >
+              <Icon d={ICONS.panel} className="h-[18px] w-[18px]" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {collapsed && onToggleCollapse && (
-        <button
-          onClick={onToggleCollapse}
-          aria-label="Sidebar uitklappen"
-          className="mx-auto mb-1 rounded-md p-1.5 text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-700 dark:hover:bg-white/5 dark:hover:text-slate-200"
-        >
-          <Icon d={ICONS.chevronRight} className="h-4 w-4" />
-        </button>
-      )}
-
-      <div className={`space-y-1 py-2 ${collapsed ? "px-2" : "px-3"}`}>
+      {/* Hoofdnavigatie */}
+      <div className={`space-y-0.5 py-2 ${collapsed ? "px-2" : "px-3"}`}>
         <button
           onClick={() => {
             router.push("/chat");
             onNavigate?.();
           }}
           title={collapsed ? "Nieuwe chat" : undefined}
-          className={`flex w-full items-center gap-2.5 rounded-lg border border-accent-600/30 bg-accent-500/10 py-2 text-sm font-medium text-accent-700 transition hover:bg-accent-500/20 active:scale-[0.98] dark:border-accent-500/30 dark:text-accent-300 ${
+          className={`flex w-full items-center gap-2.5 rounded-lg py-2 text-sm text-slate-700 transition hover:bg-slate-900/5 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white ${
             collapsed ? "justify-center px-0" : "px-3"
           }`}
         >
-          <Icon d={ICONS.plus} />
+          <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-slate-900/15 dark:border-white/20">
+            <Icon d={ICONS.plus} className="h-3.5 w-3.5" />
+          </span>
           {!collapsed && "Nieuwe chat"}
         </button>
         <NavLink
@@ -607,6 +687,14 @@ function Sidebar({
           icon={ICONS.dashboard}
           label="Dashboard"
           active={pathname === "/"}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+        <NavLink
+          href="/chats"
+          icon={ICONS.chat}
+          label="Chats"
+          active={pathname === "/chats"}
           collapsed={collapsed}
           onNavigate={onNavigate}
         />
@@ -626,130 +714,234 @@ function Sidebar({
           collapsed={collapsed}
           onNavigate={onNavigate}
         />
+        <NavLink
+          href="/aanpassen"
+          icon={ICONS.sparkle}
+          label="Aanpassen"
+          active={pathname === "/aanpassen"}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
       </div>
 
       {!collapsed && (
-        <>
-          <div className="px-3 pb-1">
-            <button
-              onClick={onOpenPalette}
-              className="flex w-full items-center gap-2.5 rounded-lg border border-slate-900/10 px-3 py-2 text-sm text-slate-400 transition hover:border-accent-400/40 hover:text-slate-600 dark:border-white/10 dark:text-slate-500 dark:hover:text-slate-300"
-            >
-              <Icon d={ICONS.search} className="h-4 w-4" />
-              <span className="flex-1 text-left">Zoeken…</span>
-              <kbd className="rounded border border-slate-900/15 px-1.5 py-0.5 text-[10px] dark:border-white/15">
-                ⌘K
-              </kbd>
-            </button>
-          </div>
-
-          <nav className="flex-1 overflow-y-auto px-3 pb-3">
-            {/* Rapporten */}
-            {reports.length > 0 && (
-              <div className="mb-2">
-                <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-600">
-                  Rapporten
-                </p>
-                {reports.slice(0, 5).map((report, i) => (
-                  <button
+        <nav className="flex-1 overflow-y-auto px-3 pb-3">
+          {/* Rapporten */}
+          {reports.length > 0 && (
+            <div className="mb-3">
+              <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Rapporten
+              </p>
+              {reports.slice(0, 5).map((report, i) => {
+                const active = activeReportId === report.id && pathname === "/research";
+                const menuOpen = menuReportId === report.id;
+                return (
+                  <div
                     key={report.id}
-                    onClick={() => {
-                      router.push(`/research?report=${report.id}`);
-                      onNavigate?.();
-                    }}
                     style={{ animationDelay: `${Math.min(i * 25, 200)}ms` }}
-                    className={`animate-slide-in group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
-                      activeReportId === report.id && pathname === "/research"
+                    className={`animate-slide-in group relative flex items-center rounded-lg text-sm transition ${
+                      active || menuOpen
                         ? "bg-slate-900/10 text-slate-900 dark:bg-white/10 dark:text-white"
                         : "text-slate-600 hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
                     }`}
                   >
-                    <Icon d={ICONS.report} className="h-4 w-4 text-slate-400 dark:text-slate-600" />
-                    <span className="min-w-0 flex-1 truncate">{report.company}</span>
-                    <span
-                      role="button"
-                      aria-label="Verwijder rapport"
-                      onClick={(e) => removeReport(report.id, e)}
-                      className="hidden shrink-0 rounded p-0.5 text-slate-500 hover:text-red-500 group-hover:block dark:hover:text-red-400"
+                    <button
+                      onClick={() => {
+                        router.push(`/research?report=${report.id}`);
+                        onNavigate?.();
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
                     >
-                      <Icon d={ICONS.close} className="h-3.5 w-3.5" />
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
+                      <Icon d={ICONS.report} className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-600" />
+                      <span className="min-w-0 flex-1 truncate">{report.company}</span>
+                    </button>
+                    <button
+                      aria-label="Rapportopties"
+                      title="Opties"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuReportId(menuOpen ? null : report.id);
+                      }}
+                      className={`mr-1 shrink-0 rounded p-1 text-slate-500 transition hover:text-slate-900 dark:hover:text-white ${
+                        menuOpen ? "flex" : "hidden group-hover:flex"
+                      }`}
+                    >
+                      <Icon d={ICONS.dots} className="h-4 w-4" />
+                    </button>
+                    {menuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setMenuReportId(null)} />
+                        <div className="animate-scale-in absolute right-1 top-9 z-50 w-40 overflow-hidden rounded-xl border border-slate-900/10 bg-white p-1 shadow-xl shadow-slate-900/20 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/60">
+                          <MenuItem
+                            icon={ICONS.research}
+                            label="Openen"
+                            onClick={() => {
+                              setMenuReportId(null);
+                              router.push(`/research?report=${report.id}`);
+                              onNavigate?.();
+                            }}
+                          />
+                          <MenuItem
+                            icon={ICONS.trash}
+                            label="Verwijderen"
+                            danger
+                            onClick={(e) => {
+                              setMenuReportId(null);
+                              removeReport(report.id, e);
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-            {/* Chats */}
-            {chats.length === 0 && (
-              <p className="px-3 py-6 text-xs text-slate-400 dark:text-slate-600">
-                Nog geen chats. Start hierboven een nieuwe chat — elk gesprek wordt
-                automatisch opgeslagen als trainingsdata.
-              </p>
-            )}
-            {pinnedChats.length > 0 && (
-              <div className="mb-4">
-                <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-600">
-                  Vastgepind
-                </p>
-                {pinnedChats.map(renderChat)}
-              </div>
-            )}
-            {groups.map((group) => (
-              <div key={group.label} className="mb-4">
-                <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-600">
-                  {group.label}
-                </p>
-                {group.items.map(renderChat)}
-              </div>
-            ))}
-          </nav>
-
-          <div className="space-y-2 border-t border-slate-900/10 p-3 dark:border-white/10">
-            <ThemeToggle />
-            <a
-              href="/api/export"
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-slate-600 transition hover:bg-slate-900/5 hover:text-accent-700 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-accent-300"
-            >
-              <Icon d={ICONS.download} className="h-4 w-4" />
-              <span>
-                Exporteer trainingsdata
-                <span className="block text-[10px] text-slate-400 dark:text-slate-600">
-                  {chats.length} {chats.length === 1 ? "chat" : "chats"} · JSONL
-                </span>
-              </span>
-            </a>
+          {/* Recents */}
+          <div className="flex items-center justify-between px-3 pb-1.5 pt-2">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              Recent
+            </p>
             <button
-              onClick={() => {
-                onOpenSettings();
-                onNavigate?.();
-              }}
-              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-900/5 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"
+              onClick={onOpenPalette}
+              aria-label="Zoeken in chats"
+              title="Zoeken (⌘K)"
+              className="rounded p-0.5 text-slate-400 transition hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200"
             >
-              <Icon d={ICONS.settings} />
-              Instellingen
+              <Icon d={ICONS.sliders} className="h-4 w-4" />
             </button>
           </div>
-        </>
+
+          {chats.length === 0 && (
+            <p className="px-3 py-4 text-xs leading-relaxed text-slate-400 dark:text-slate-600">
+              Nog geen chats. Start hierboven een nieuwe chat — elk gesprek wordt
+              automatisch opgeslagen als trainingsdata.
+            </p>
+          )}
+          {pinnedChats.length > 0 && (
+            <div className="mb-3">
+              {pinnedChats.map(renderChat)}
+            </div>
+          )}
+          {groups.map((group) => (
+            <div key={group.label} className="mb-3">
+              {group.label !== "Vandaag" && (
+                <p className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-600">
+                  {group.label}
+                </p>
+              )}
+              {group.items.map(renderChat)}
+            </div>
+          ))}
+        </nav>
       )}
 
-      {collapsed && (
-        <div className="flex flex-1 flex-col justify-end space-y-1 px-2 pb-3">
+      {/* Account onderaan (Claude-stijl): naam + tandwiel voor directe
+          instellingen, plus een dropdown-menu voor thema/export/sneltoetsen. */}
+      {!collapsed ? (
+        <div className="relative flex items-center gap-1 border-t border-slate-900/10 p-3 dark:border-white/10">
+          {accountMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setAccountMenuOpen(false)} />
+              <div className="animate-scale-in absolute bottom-full left-3 right-3 z-50 mb-2 overflow-hidden rounded-2xl border border-slate-900/10 bg-white p-1.5 shadow-xl shadow-slate-900/25 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/60">
+                <p className="truncate px-3 pb-1.5 pt-1.5 text-xs text-slate-400 dark:text-slate-500">
+                  {userEmail || "Ingelogd"}
+                </p>
+                <MenuItem
+                  icon={ICONS.cog}
+                  label="Instellingen"
+                  hint="⌘,"
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    onOpenSettings();
+                    onNavigate?.();
+                  }}
+                />
+                <MenuItem
+                  icon={ICONS.keyboard}
+                  label="Sneltoetsen"
+                  hint="?"
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    onOpenShortcuts();
+                  }}
+                />
+                <MenuItem
+                  icon={ICONS.download}
+                  label="Exporteer trainingsdata"
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    window.location.assign("/api/export");
+                  }}
+                />
+                <div className="my-1 h-px bg-slate-900/[0.07] dark:bg-white/[0.07]" />
+                <MenuItem
+                  icon={ICONS.logout}
+                  label="Uitloggen"
+                  danger
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    onLogout();
+                  }}
+                />
+              </div>
+            </>
+          )}
           <button
-            onClick={onOpenPalette}
-            title="Zoeken (⌘K)"
-            className="flex w-full justify-center rounded-lg py-2 text-slate-500 transition hover:bg-slate-900/5 hover:text-slate-800 dark:hover:bg-white/5 dark:hover:text-slate-200"
+            onClick={() => setAccountMenuOpen((o) => !o)}
+            aria-haspopup="menu"
+            aria-expanded={accountMenuOpen}
+            title="Account"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-slate-900/5 dark:hover:bg-white/5"
           >
-            <Icon d={ICONS.search} />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-500/20 text-xs font-semibold text-accent-700 dark:text-accent-300">
+              {initials(userName)}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                {userName || "Account"}
+              </span>
+              <span className="block truncate text-xs text-slate-400 dark:text-slate-500">
+                Vantage-werkruimte
+              </span>
+            </span>
+            <Icon d={ICONS.chevronUpDown} className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
           </button>
           <button
             onClick={() => {
               onOpenSettings();
               onNavigate?.();
             }}
+            aria-label="Instellingen"
             title="Instellingen"
-            className="flex w-full justify-center rounded-lg py-2 text-slate-500 transition hover:bg-slate-900/5 hover:text-slate-800 dark:hover:bg-white/5 dark:hover:text-slate-200"
+            className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-500 dark:hover:bg-white/5 dark:hover:text-slate-100"
           >
-            <Icon d={ICONS.settings} />
+            <Icon d={ICONS.cog} className="h-[18px] w-[18px]" />
+          </button>
+        </div>
+      ) : (
+        <div className="mt-auto flex flex-col items-center gap-1 border-t border-slate-900/10 p-2 dark:border-white/10">
+          <a
+            href="/api/export"
+            title="Exporteer trainingsdata"
+            aria-label="Exporteer trainingsdata"
+            className="flex w-full justify-center rounded-lg py-2 text-slate-500 transition hover:bg-slate-900/5 hover:text-accent-700 dark:hover:bg-white/5 dark:hover:text-accent-300"
+          >
+            <Icon d={ICONS.download} />
+          </a>
+          <button
+            onClick={() => {
+              onOpenSettings();
+              onNavigate?.();
+            }}
+            title="Instellingen"
+            className="flex w-full justify-center rounded-lg p-1.5 transition hover:bg-slate-900/5 dark:hover:bg-white/5"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-500/20 text-xs font-semibold text-accent-700 dark:text-accent-300">
+              {initials(userName)}
+            </span>
           </button>
         </div>
       )}
@@ -763,6 +955,7 @@ const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ["⌘", "K"], label: "Zoeken in chats, rapporten en acties" },
   { keys: ["⌘", "B"], label: "Sidebar in- of uitklappen" },
   { keys: ["⌘", "⇧", "O"], label: "Nieuwe chat" },
+  { keys: ["⌘", ","], label: "Instellingen openen" },
   { keys: ["Enter"], label: "Bericht versturen" },
   { keys: ["⇧", "Enter"], label: "Nieuwe regel in een bericht" },
   { keys: ["?"], label: "Dit overzicht openen of sluiten" },
@@ -903,6 +1096,8 @@ export default function AppShell({
   }
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [reports, setReports] = useState<ReportSummary[]>([]);
+  const [userName, setUserName] = useState("");
+  const [userEmail, setUserEmail] = useState("");
 
   const refreshChats = useCallback(async () => {
     try {
@@ -935,6 +1130,37 @@ export default function AppShell({
       window.removeEventListener(REPORTS_UPDATED_EVENT, refreshReports);
     };
   }, [refreshChats, refreshReports]);
+
+  // Naam en e-mail van het ingelogde account voor de account-rij.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me");
+        const data = await res.json();
+        if (!cancelled && data.user) {
+          setUserName(data.user.name ?? "");
+          setUserEmail(data.user.email ?? "");
+        }
+      } catch {
+        // account-info mag stil falen
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Uitloggen: sessie intrekken en terug naar de loginpagina.
+  const logout = useCallback(async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ook bij een netwerkfout sturen we door naar login
+    }
+    router.replace("/login");
+    router.refresh();
+  }, [router]);
 
   // Instellingen-popup sluiten; op de /settings-deeplink navigeren we terug.
   function closeSettings() {
@@ -975,6 +1201,9 @@ export default function AppShell({
       } else if (mod && e.shiftKey && e.key.toLowerCase() === "o") {
         e.preventDefault();
         router.push("/chat");
+      } else if (mod && e.key === ",") {
+        e.preventDefault();
+        setSettingsTab("profiel");
       } else if (e.key === "?" && !mod && !e.altKey && !isEditable(e.target)) {
         e.preventDefault();
         setShortcutsOpen((o) => !o);
@@ -1045,9 +1274,13 @@ export default function AppShell({
           collapsed={collapsed}
           width={sidebarWidth}
           resizing={resizing}
+          userName={userName}
+          userEmail={userEmail}
           onToggleCollapse={toggleCollapse}
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenSettings={() => setSettingsTab("profiel")}
+          onOpenShortcuts={() => setShortcutsOpen(true)}
+          onLogout={logout}
           refreshChats={refreshChats}
           refreshReports={refreshReports}
         />
@@ -1071,12 +1304,19 @@ export default function AppShell({
             chats={chats}
             reports={reports}
             collapsed={false}
+            userName={userName}
+            userEmail={userEmail}
             onNavigate={() => setMobileOpen(false)}
             onOpenPalette={() => {
               setMobileOpen(false);
               setPaletteOpen(true);
             }}
             onOpenSettings={() => setSettingsTab("profiel")}
+            onOpenShortcuts={() => {
+              setMobileOpen(false);
+              setShortcutsOpen(true);
+            }}
+            onLogout={logout}
             refreshChats={refreshChats}
             refreshReports={refreshReports}
           />
