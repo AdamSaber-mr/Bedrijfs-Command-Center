@@ -1,12 +1,15 @@
-# Bedrijfs Command Center
+# Vantage
 
-Een zakelijke AI-werkplek aangedreven door de Claude API, met drie onderdelen:
+Een zakelijke AI-werkplek aangedreven door de Claude API. Kernonderdelen:
 
 1. **Dashboard** (`/`) — overzicht met recente chats, opgeslagen deal-rapporten, statistieken en een directe vraagbalk.
 2. **AI-chat** (`/chat`) — chatten met Claude in een cleane interface zoals ChatGPT/Claude.ai. Elke chat wordt automatisch opgeslagen en is exporteerbaar als trainingsdata.
-3. **Company & Deal Research Assistant** (`/research`) — voer een bedrijfsnaam in en ontvang een gestructureerde business-analyse die wordt opgeslagen, inclusief bronvermeldingen.
+3. **Chats** (`/chats`) — volledig, doorzoekbaar overzicht van alle gesprekken.
+4. **Company & Deal Research Assistant** (`/research`) — voer een bedrijfsnaam in en ontvang een gestructureerde business-analyse die wordt opgeslagen, inclusief bronvermeldingen.
+5. **Notities** (`/notes`) — losse markdown-notities.
+6. **Aanpassen** (`/aanpassen`) — beheer van herbruikbare prompt-sjablonen.
 
-Overal beschikbaar: een **command palette** (⌘K / Ctrl+K) om te zoeken door chats, rapporten en acties, een **inklapbare sidebar** met chat-filter, en een licht/donker thema.
+Overal beschikbaar: een **command palette** (⌘K / Ctrl+K) om te zoeken door chats, rapporten en acties, een **inklapbare sidebar** in Claude-stijl met een account-menu, en een licht/donker/automatisch thema (in te stellen via het account-menu of Instellingen).
 
 ## AI-chat & trainingsdata
 
@@ -15,7 +18,7 @@ Overal beschikbaar: een **command palette** (⌘K / Ctrl+K) om te zoeken door ch
 - Antwoorden streamen live het scherm in met markdown-weergave en syntax highlighting; genereren is te stoppen met de **Stop**-knop (het gedeeltelijke antwoord blijft bewaard).
 - Per antwoord: **kopieer**-knop en — bij het laatste antwoord — **genereer opnieuw**.
 - Elk gesprek wordt server-side opgeslagen als JSON in `data/chats/` (staat in `.gitignore`, blijft dus lokaal en privé).
-- Via **"Exporteer trainingsdata"** onderin de sidebar download je alle gesprekken als JSONL in het gangbare finetune-formaat: één regel per gesprek, `{"messages": [{"role", "content"}, ...]}`. Direct bruikbaar om later een eigen model mee te trainen.
+- Via **"Exporteer trainingsdata"** in het account-menu (linksonder) download je alle gesprekken als JSONL in het gangbare finetune-formaat: één regel per gesprek, `{"messages": [{"role", "content"}, ...]}`. Direct bruikbaar om later een eigen model mee te trainen.
 
 ## Company & Deal Research Assistant
 

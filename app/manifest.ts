@@ -3,10 +3,10 @@ import type { MetadataRoute } from "next";
 // Maakt de app installeerbaar (PWA): eigen venster, icoon in dock/homescreen.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Bedrijfs Command Center",
-    short_name: "Command Center",
+    name: "Vantage",
+    short_name: "Vantage",
     description:
-      "Zakelijke AI-werkplek: chat, deal-research, notities en trainingsdata.",
+      "Vantage — zakelijke AI-werkplek: chat, deal-research, notities en trainingsdata.",
     start_url: "/",
     display: "standalone",
     background_color: "#0a0f1a",
