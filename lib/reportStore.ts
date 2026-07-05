@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import type { ResearchReport } from "./research";
+import { requireUserId, userRoot } from "./auth";
 
 export interface Citation {
   url: string;
@@ -24,17 +25,17 @@ export interface ReportSummary {
   fitScore: number;
 }
 
-// Rapporten worden net als chats als losse JSON-bestanden bewaard,
-// zodat analyses na een refresh terug te vinden zijn.
-const DATA_DIR = path.join(process.cwd(), "data", "reports");
-
-async function ensureDir() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
+// Rapporten worden net als chats als losse JSON-bestanden bewaard, per
+// gebruiker in data/users/<id>/reports/.
+async function reportsDir(): Promise<string> {
+  const dir = path.join(userRoot(await requireUserId()), "reports");
+  await fs.mkdir(dir, { recursive: true });
+  return dir;
 }
 
-function fileFor(id: string) {
+async function fileFor(id: string): Promise<string> {
   if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new Error("Ongeldig rapport-ID");
-  return path.join(DATA_DIR, `${id}.json`);
+  return path.join(await reportsDir(), `${id}.json`);
 }
 
 export async function saveReport(
@@ -42,7 +43,6 @@ export async function saveReport(
   report: ResearchReport,
   citations: Citation[]
 ): Promise<SavedReport> {
-  await ensureDir();
   const saved: SavedReport = {
     id: randomUUID(),
     company,
@@ -50,13 +50,13 @@ export async function saveReport(
     report,
     citations,
   };
-  await fs.writeFile(fileFor(saved.id), JSON.stringify(saved, null, 2), "utf-8");
+  await fs.writeFile(await fileFor(saved.id), JSON.stringify(saved, null, 2), "utf-8");
   return saved;
 }
 
 export async function getReport(id: string): Promise<SavedReport | null> {
   try {
-    return JSON.parse(await fs.readFile(fileFor(id), "utf-8")) as SavedReport;
+    return JSON.parse(await fs.readFile(await fileFor(id), "utf-8")) as SavedReport;
   } catch {
     return null;
   }
@@ -64,22 +64,22 @@ export async function getReport(id: string): Promise<SavedReport | null> {
 
 export async function deleteReport(id: string): Promise<void> {
   try {
-    await fs.unlink(fileFor(id));
+    await fs.unlink(await fileFor(id));
   } catch {
     // bestaat al niet meer — prima
   }
 }
 
 export async function listReports(): Promise<ReportSummary[]> {
-  await ensureDir();
-  const files = await fs.readdir(DATA_DIR);
+  const dir = await reportsDir();
+  const files = await fs.readdir(dir);
   const reports = await Promise.all(
     files
       .filter((f) => f.endsWith(".json"))
       .map(async (f) => {
         try {
           const saved = JSON.parse(
-            await fs.readFile(path.join(DATA_DIR, f), "utf-8")
+            await fs.readFile(path.join(dir, f), "utf-8")
           ) as SavedReport;
           return {
             id: saved.id,

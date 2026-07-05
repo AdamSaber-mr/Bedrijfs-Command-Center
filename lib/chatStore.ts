@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
+import { requireUserId, userRoot } from "./auth";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -30,30 +31,31 @@ export interface ChatSummary {
   pinned: boolean;
 }
 
-// Chats worden als losse JSON-bestanden bewaard zodat ze later 1-op-1
-// als trainingsdata te gebruiken zijn (zie /api/export voor JSONL).
-const DATA_DIR = path.join(process.cwd(), "data", "chats");
-
-async function ensureDir() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
+// Chats worden als losse JSON-bestanden bewaard, per gebruiker in
+// data/users/<id>/chats/, zodat ze later 1-op-1 als trainingsdata te
+// gebruiken zijn (zie /api/export voor JSONL).
+async function chatsDir(): Promise<string> {
+  const dir = path.join(userRoot(await requireUserId()), "chats");
+  await fs.mkdir(dir, { recursive: true });
+  return dir;
 }
 
-function fileFor(id: string) {
+async function fileFor(id: string): Promise<string> {
   // ID's komen alleen uit randomUUID, maar valideer defensief tegen path traversal.
   if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new Error("Ongeldig chat-ID");
-  return path.join(DATA_DIR, `${id}.json`);
+  return path.join(await chatsDir(), `${id}.json`);
 }
 
 export async function listChats(): Promise<ChatSummary[]> {
-  await ensureDir();
-  const files = await fs.readdir(DATA_DIR);
+  const dir = await chatsDir();
+  const files = await fs.readdir(dir);
   const chats = await Promise.all(
     files
       .filter((f) => f.endsWith(".json"))
       .map(async (f) => {
         try {
           const chat = JSON.parse(
-            await fs.readFile(path.join(DATA_DIR, f), "utf-8")
+            await fs.readFile(path.join(dir, f), "utf-8")
           ) as Chat;
           return {
             id: chat.id,
@@ -74,7 +76,7 @@ export async function listChats(): Promise<ChatSummary[]> {
 
 export async function getChat(id: string): Promise<Chat | null> {
   try {
-    return JSON.parse(await fs.readFile(fileFor(id), "utf-8")) as Chat;
+    return JSON.parse(await fs.readFile(await fileFor(id), "utf-8")) as Chat;
   } catch {
     return null;
   }
@@ -92,9 +94,8 @@ export function newChat(firstMessage: string): Chat {
 }
 
 export async function saveChat(chat: Chat): Promise<void> {
-  await ensureDir();
   chat.updatedAt = new Date().toISOString();
-  await fs.writeFile(fileFor(chat.id), JSON.stringify(chat, null, 2), "utf-8");
+  await fs.writeFile(await fileFor(chat.id), JSON.stringify(chat, null, 2), "utf-8");
 }
 
 // Titel of pin-status aanpassen zónder updatedAt te verhogen, zodat de chat
@@ -111,20 +112,19 @@ export async function updateChatMeta(
   if (typeof patch.pinned === "boolean") {
     chat.pinned = patch.pinned;
   }
-  await fs.writeFile(fileFor(chat.id), JSON.stringify(chat, null, 2), "utf-8");
+  await fs.writeFile(await fileFor(chat.id), JSON.stringify(chat, null, 2), "utf-8");
   return chat;
 }
 
 export async function deleteChat(id: string): Promise<void> {
   try {
-    await fs.unlink(fileFor(id));
+    await fs.unlink(await fileFor(id));
   } catch {
     // bestaat al niet meer — prima
   }
 }
 
 export async function allChats(): Promise<Chat[]> {
-  await ensureDir();
   const summaries = await listChats();
   const chats = await Promise.all(summaries.map((s) => getChat(s.id)));
   return chats.filter((c): c is Chat => c !== null);

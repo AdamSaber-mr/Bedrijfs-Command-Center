@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
+import { requireUserId, userRoot } from "./auth";
 
 export interface Note {
   id: string;
@@ -16,28 +17,28 @@ export interface NoteSummary {
   updatedAt: string;
 }
 
-// Notities als losse JSON-bestanden, net als chats en rapporten.
-const DATA_DIR = path.join(process.cwd(), "data", "notes");
-
-async function ensureDir() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
+// Notities als losse JSON-bestanden, per gebruiker in data/users/<id>/notes/.
+async function notesDir(): Promise<string> {
+  const dir = path.join(userRoot(await requireUserId()), "notes");
+  await fs.mkdir(dir, { recursive: true });
+  return dir;
 }
 
-function fileFor(id: string) {
+async function fileFor(id: string): Promise<string> {
   if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new Error("Ongeldig notitie-ID");
-  return path.join(DATA_DIR, `${id}.json`);
+  return path.join(await notesDir(), `${id}.json`);
 }
 
 export async function listNotes(): Promise<NoteSummary[]> {
-  await ensureDir();
-  const files = await fs.readdir(DATA_DIR);
+  const dir = await notesDir();
+  const files = await fs.readdir(dir);
   const notes = await Promise.all(
     files
       .filter((f) => f.endsWith(".json"))
       .map(async (f) => {
         try {
           const note = JSON.parse(
-            await fs.readFile(path.join(DATA_DIR, f), "utf-8")
+            await fs.readFile(path.join(dir, f), "utf-8")
           ) as Note;
           return { id: note.id, title: note.title, updatedAt: note.updatedAt };
         } catch {
@@ -52,14 +53,13 @@ export async function listNotes(): Promise<NoteSummary[]> {
 
 export async function getNote(id: string): Promise<Note | null> {
   try {
-    return JSON.parse(await fs.readFile(fileFor(id), "utf-8")) as Note;
+    return JSON.parse(await fs.readFile(await fileFor(id), "utf-8")) as Note;
   } catch {
     return null;
   }
 }
 
 export async function createNote(): Promise<Note> {
-  await ensureDir();
   const now = new Date().toISOString();
   const note: Note = {
     id: randomUUID(),
@@ -68,14 +68,13 @@ export async function createNote(): Promise<Note> {
     createdAt: now,
     updatedAt: now,
   };
-  await fs.writeFile(fileFor(note.id), JSON.stringify(note, null, 2), "utf-8");
+  await fs.writeFile(await fileFor(note.id), JSON.stringify(note, null, 2), "utf-8");
   return note;
 }
 
 export async function saveNote(note: Note): Promise<void> {
-  await ensureDir();
   note.updatedAt = new Date().toISOString();
-  await fs.writeFile(fileFor(note.id), JSON.stringify(note, null, 2), "utf-8");
+  await fs.writeFile(await fileFor(note.id), JSON.stringify(note, null, 2), "utf-8");
 }
 
 export async function updateNote(
@@ -92,7 +91,7 @@ export async function updateNote(
 
 export async function deleteNote(id: string): Promise<void> {
   try {
-    await fs.unlink(fileFor(id));
+    await fs.unlink(await fileFor(id));
   } catch {
     // bestaat al niet meer — prima
   }

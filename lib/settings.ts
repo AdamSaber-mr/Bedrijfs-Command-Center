@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { requireUserId, userRoot } from "./auth";
 import {
   DEFAULT_SETTINGS,
   MAX_TOKENS_OPTIONS,
@@ -9,11 +10,16 @@ import {
 
 export type { Settings };
 
-const SETTINGS_FILE = path.join(process.cwd(), "data", "settings.json");
+// Instellingen zijn per gebruiker: data/users/<id>/settings.json.
+async function settingsFile(): Promise<string> {
+  const root = userRoot(await requireUserId());
+  await fs.mkdir(root, { recursive: true });
+  return path.join(root, "settings.json");
+}
 
 export async function getSettings(): Promise<Settings> {
   try {
-    const raw = JSON.parse(await fs.readFile(SETTINGS_FILE, "utf-8"));
+    const raw = JSON.parse(await fs.readFile(await settingsFile(), "utf-8"));
     return sanitize(raw);
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -22,8 +28,7 @@ export async function getSettings(): Promise<Settings> {
 
 export async function saveSettings(input: unknown): Promise<Settings> {
   const settings = sanitize(input);
-  await fs.mkdir(path.dirname(SETTINGS_FILE), { recursive: true });
-  await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf-8");
+  await fs.writeFile(await settingsFile(), JSON.stringify(settings, null, 2), "utf-8");
   return settings;
 }
 
