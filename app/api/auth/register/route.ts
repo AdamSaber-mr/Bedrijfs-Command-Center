@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
+import { promises as fs } from "fs";
+import path from "path";
 import { EMAIL_RE, createUser, issueRecoveryCode, publicUser, userCount } from "@/lib/users";
 import {
   createSession,
   getCurrentUserId,
   migrateLegacyData,
   setSessionCookie,
+  userRoot,
 } from "@/lib/auth";
 import { getAppConfig, saveAppConfig } from "@/lib/appConfig";
+import { DEFAULT_SETTINGS } from "@/lib/settingsShared";
 
 // De allereerste registratie is altijd toegestaan; daarna bepaalt de
 // app-instelling "openRegistration" of nieuwe accounts welkom zijn.
@@ -72,6 +76,22 @@ export async function POST(request: Request) {
     );
   }
   if (firstUser) await migrateLegacyData(user.id);
+
+  // AI-instellingen starten met de voornaam van het account (voor de
+  // begroeting en systeemprompt) — tenzij er al instellingen zijn
+  // (bijv. geërfd via de legacy-migratie hierboven).
+  const settingsFile = path.join(userRoot(user.id), "settings.json");
+  try {
+    await fs.access(settingsFile);
+  } catch {
+    const firstName = user.name.trim().split(/\s+/)[0] || DEFAULT_SETTINGS.name;
+    await fs.mkdir(userRoot(user.id), { recursive: true });
+    await fs.writeFile(
+      settingsFile,
+      JSON.stringify({ ...DEFAULT_SETTINGS, name: firstName }, null, 2),
+      "utf-8"
+    );
+  }
 
   // Herstelcode voor "wachtwoord vergeten" — één keer zichtbaar bij registratie.
   const recoveryCode = await issueRecoveryCode(user.id);
