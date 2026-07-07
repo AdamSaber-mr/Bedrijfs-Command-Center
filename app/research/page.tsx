@@ -3,21 +3,30 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppShell, { REPORTS_UPDATED_EVENT } from "@/components/AppShell";
+import { WATCHES_UPDATED_EVENT } from "@/lib/events";
 import type { ThreatLevel } from "@/lib/research";
 import type { SavedReport } from "@/lib/reportStore";
+import type { Watch } from "@/lib/watchStore";
 import { useCountUp } from "@/lib/animation";
 
 const EXAMPLES = ["ASML", "Adyen", "Coolblue", "Tesla", "Bol.com"];
 
-const LOADING_STEPS = [
-  "Bedrijfsprofiel opzoeken…",
-  "Actuele bronnen doorzoeken…",
-  "Marktpositie analyseren…",
-  "Concurrentielandschap in kaart brengen…",
-  "Partnership-fit beoordelen…",
-  "Risico's wegen…",
-  "Rapport samenstellen…",
-];
+// Live gevonden webbron tijdens de analyse (NDJSON-event van de server).
+interface LiveSource {
+  url: string;
+  title: string;
+}
+
+// Eén regel uit de NDJSON-stream van /api/research.
+interface ResearchStreamEvent {
+  type?: string;
+  text?: string;
+  url?: string;
+  title?: string;
+  saved?: SavedReport;
+  error?: string;
+  status?: number;
+}
 
 const SEVERITY_STYLES: Record<ThreatLevel, string> = {
   laag: "bg-accent-500/10 text-accent-700 dark:text-accent-300 border-accent-600/30 dark:border-accent-500/30",
@@ -153,24 +162,28 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
-function LoadingState({ company }: { company: string }) {
-  const [step, setStep] = useState(0);
+// Laadweergave met échte voortgang: de statusregel en de bronnenlijst komen
+// live uit de NDJSON-stream van de server, niet uit een timer.
+function LoadingState({
+  company,
+  statusText,
+  sources,
+  onCancel,
+}: {
+  company: string;
+  statusText: string;
+  sources: LiveSource[];
+  onCancel: () => void;
+}) {
   const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
-    const stepTimer = setInterval(
-      () => setStep((s) => Math.min(s + 1, LOADING_STEPS.length - 1)),
-      9000
-    );
     const secTimer = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => {
-      clearInterval(stepTimer);
-      clearInterval(secTimer);
-    };
+    return () => clearInterval(secTimer);
   }, []);
 
   return (
-    <div className="animate-fade-up mx-auto mt-16 max-w-lg rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-8 text-center">
+    <div className="animate-fade-up mx-auto mt-16 w-full max-w-lg rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-8 text-center">
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10">
         <div className="flex gap-1.5">
           {[0, 1, 2].map((i) => (
@@ -185,18 +198,332 @@ function LoadingState({ company }: { company: string }) {
       <h2 className="mt-6 font-[family-name:var(--font-display)] text-lg font-semibold text-slate-900 dark:text-slate-100">
         Analyse van {company}
       </h2>
-      <p className="mt-2 text-sm text-accent-700/90 dark:text-accent-300/90">{LOADING_STEPS[step]}</p>
+      <p className="mt-2 text-sm text-accent-700/90 dark:text-accent-300/90">
+        {statusText || "Analyse starten…"}
+      </p>
       <p className="mt-6 text-xs text-slate-500">
         Claude doorzoekt actuele bronnen en stelt het rapport samen — dit duurt doorgaans 1 à 3 minuten.
         <span className="ml-2 font-[family-name:var(--font-mono)] tabular-nums text-slate-600 dark:text-slate-400">
           {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
         </span>
       </p>
+
+      {/* Live groeiende bronnenlijst — verschijnt zodra de eerste bron binnenkomt */}
+      {sources.length > 0 && (
+        <div className="mt-6 rounded-xl border border-slate-900/10 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] p-4 text-left">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Gevonden bronnen ({sources.length})
+          </p>
+          <ul className="mt-2.5 max-h-44 space-y-1.5 overflow-y-auto">
+            {sources.map((s) => (
+              <li key={s.url} className="animate-fade-up flex items-start gap-2 text-xs">
+                <span aria-hidden className="mt-0.5 text-accent-600/80 dark:text-accent-400/70">↗</span>
+                <span className="min-w-0">
+                  <span className="block truncate font-medium text-slate-700 dark:text-slate-300">
+                    {s.title}
+                  </span>
+                  <span className="block truncate text-slate-500 dark:text-slate-500">
+                    {(() => {
+                      try {
+                        return new URL(s.url).hostname.replace(/^www\./, "");
+                      } catch {
+                        return s.url;
+                      }
+                    })()}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <button
+        onClick={onCancel}
+        className="mt-6 rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-600 dark:text-slate-400 transition hover:border-red-400/50 hover:text-red-700 dark:hover:text-red-300"
+      >
+        Annuleren
+      </button>
     </div>
   );
 }
 
-function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void }) {
+// Delta-chip voor de vergelijking met het vorige rapport: "62 → 67 (+5)".
+function DeltaChip({ label, from, to }: { label: string; from: number; to: number }) {
+  const delta = to - from;
+  const tone =
+    delta > 0
+      ? "bg-accent-500/10 text-accent-700 dark:text-accent-300"
+      : delta < 0
+        ? "bg-red-500/10 text-red-700 dark:text-red-300"
+        : "bg-slate-500/10 text-slate-600 dark:text-slate-400";
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium tabular-nums ${tone}`}>
+      {label}: {from} → {to}
+      {delta !== 0 && (
+        <span>
+          ({delta > 0 ? "+" : ""}
+          {delta})
+        </span>
+      )}
+    </span>
+  );
+}
+
+// "Wat is er veranderd" — vergelijkt een ververst rapport met zijn voorganger:
+// score-deltas altijd; concurrenten op naam (stabiel), risico's op titel
+// (AI-titels wisselen nogal eens, dus alleen als indicatie).
+function ChangesSince({ saved }: { saved: SavedReport }) {
+  const [prev, setPrev] = useState<SavedReport | null>(null);
+
+  useEffect(() => {
+    if (!saved.previousReportId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/reports/${saved.previousReportId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setPrev(data.saved);
+      } catch {
+        // vorig rapport onvindbaar (bv. verwijderd) — sectie gewoon weglaten
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [saved.previousReportId]);
+
+  if (!saved.previousReportId || !prev) return null;
+
+  const norm = (s: string) => s.trim().toLowerCase();
+  const prevCompetitors = new Set(prev.report.competitors.map((c) => norm(c.name)));
+  const newCompetitors = saved.report.competitors.filter((c) => !prevCompetitors.has(norm(c.name)));
+  const currCompetitors = new Set(saved.report.competitors.map((c) => norm(c.name)));
+  const goneCompetitors = prev.report.competitors.filter((c) => !currCompetitors.has(norm(c.name)));
+  const prevRisks = new Set(prev.report.risks.map((r) => norm(r.title)));
+  const newRisks = saved.report.risks.filter((r) => !prevRisks.has(norm(r.title)));
+
+  const marketDelta = saved.report.market_position.score - prev.report.market_position.score;
+  const fitDelta = saved.report.partnership_fit.score - prev.report.partnership_fit.score;
+  const noChanges =
+    marketDelta === 0 && fitDelta === 0 && newCompetitors.length === 0 &&
+    goneCompetitors.length === 0 && newRisks.length === 0;
+
+  const prevDate = new Date(prev.createdAt).toLocaleDateString("nl-NL", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  return (
+    <section className="rounded-2xl border border-slate-900/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-slate-900 dark:text-slate-100">
+          Veranderd sinds {prevDate}
+        </h2>
+        <a
+          href={`/research?report=${prev.id}`}
+          className="text-xs font-medium text-accent-700 dark:text-accent-300 hover:underline"
+        >
+          Bekijk vorig rapport →
+        </a>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <DeltaChip label="Marktpositie" from={prev.report.market_position.score} to={saved.report.market_position.score} />
+        <DeltaChip label="Partnership-fit" from={prev.report.partnership_fit.score} to={saved.report.partnership_fit.score} />
+      </div>
+      {noChanges ? (
+        <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
+          Geen noemenswaardige verschuivingen sinds het vorige rapport.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+          {newCompetitors.length > 0 && (
+            <p>
+              <strong>Nieuwe concurrenten:</strong>{" "}
+              {newCompetitors.map((c) => c.name).join(", ")}
+            </p>
+          )}
+          {goneCompetitors.length > 0 && (
+            <p>
+              <strong>Niet meer genoemd als concurrent:</strong>{" "}
+              {goneCompetitors.map((c) => c.name).join(", ")}
+            </p>
+          )}
+          {newRisks.length > 0 && (
+            <p>
+              <strong>Nieuw benoemde risico&apos;s:</strong>{" "}
+              {newRisks.map((r) => r.title).join(", ")}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Dealbewaking: volg het bedrijf van dit rapport. Vantage checkt gevolgde
+// bedrijven dagelijks (bij het openen van het dashboard) op dealrelevant
+// nieuws; updates verschijnen onder de bel en op het dashboard.
+function FollowButton({ company, reportId }: { company: string; reportId: string }) {
+  const [watch, setWatch] = useState<Watch | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/watches");
+        const data = await res.json();
+        if (cancelled) return;
+        const normalized = company.trim().toLowerCase();
+        const match = (data.watches ?? []).find(
+          (w: Watch) => w.company.trim().toLowerCase() === normalized
+        );
+        setWatch(match ?? null);
+      } catch {
+        // knop blijft dan in laad-stand
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [company]);
+
+  async function toggle() {
+    if (busy || !loaded) return;
+    setBusy(true);
+    try {
+      if (watch) {
+        await fetch(`/api/watches/${watch.id}`, { method: "DELETE" });
+        setWatch(null);
+      } else {
+        const res = await fetch("/api/watches", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ company, reportId }),
+        });
+        const data = await res.json();
+        if (res.ok) setWatch(data.watch);
+      }
+      window.dispatchEvent(new Event(WATCHES_UPDATED_EVENT));
+    } catch {
+      // netwerkfout — stand blijft zoals hij was
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const following = watch !== null;
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy || !loaded}
+      title={
+        following
+          ? "Dit bedrijf wordt dagelijks gecheckt op dealrelevant nieuws — klik om te ontvolgen"
+          : "Check dit bedrijf dagelijks op dealrelevant nieuws; updates verschijnen onder de bel"
+      }
+      className={`rounded-lg border px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${
+        following
+          ? "border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 text-accent-700 dark:text-accent-300 hover:bg-accent-500/20"
+          : "border-slate-900/15 dark:border-white/15 text-slate-700 dark:text-slate-300 hover:border-accent-400/50 hover:text-slate-900 dark:hover:text-white"
+      }`}
+    >
+      {following ? "✓ Gevolgd" : "🔔 Volg bedrijf"}
+    </button>
+  );
+}
+
+// Van los rapport naar de kernflow: bundel het rapport in een (nieuw) project,
+// zodat chats, notities en vervolgrapporten over deze deal bij elkaar komen.
+function ProjectAction({ saved }: { saved: SavedReport }) {
+  const router = useRouter();
+  const [projectId, setProjectId] = useState<string | null>(saved.projectId ?? null);
+  const [busy, setBusy] = useState(false);
+
+  // Reset de lokale stand wanneer een ander rapport getoond wordt.
+  const [prevSavedId, setPrevSavedId] = useState(saved.id);
+  if (prevSavedId !== saved.id) {
+    setPrevSavedId(saved.id);
+    setProjectId(saved.projectId ?? null);
+  }
+
+  async function bundle() {
+    if (busy || projectId) return;
+    setBusy(true);
+    try {
+      // 1. Project aanmaken met de bedrijfsnaam als naam.
+      const projectRes = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: saved.company,
+          description: `Deal-onderzoek naar ${saved.company}`,
+        }),
+      });
+      const projectData = await projectRes.json();
+      if (!projectRes.ok) throw new Error(projectData.error);
+      const newProjectId: string = projectData.project.id;
+
+      // 2. Rapport aan het project koppelen.
+      const patchRes = await fetch(`/api/reports/${saved.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: newProjectId }),
+      });
+      if (!patchRes.ok) throw new Error("Koppelen mislukt");
+
+      // 3. Sidebar/dashboard laten verversen en de knop laten omslaan.
+      setProjectId(newProjectId);
+      window.dispatchEvent(new Event(REPORTS_UPDATED_EVENT));
+
+      // 4. Direct door naar het projectdetail.
+      router.push(`/projecten?project=${newProjectId}`);
+    } catch {
+      // netwerk-/serverfout — knop blijft beschikbaar om opnieuw te proberen
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (projectId) {
+    return (
+      <a
+        href={`/projecten?project=${projectId}`}
+        title="Dit rapport is gebundeld in een project — klik om het project te openen"
+        className="inline-flex items-center rounded-lg px-3 py-2 text-sm text-slate-500 dark:text-slate-400 transition hover:text-accent-700 dark:hover:text-accent-300"
+      >
+        📁 In project
+      </a>
+    );
+  }
+
+  return (
+    <button
+      onClick={bundle}
+      disabled={busy}
+      title="Maak een project voor deze deal en bundel dit rapport erin"
+      className="rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:border-accent-400/50 hover:text-slate-900 dark:hover:text-white disabled:opacity-50"
+    >
+      {busy ? "Project aanmaken…" : "📁 Bundel in project"}
+    </button>
+  );
+}
+
+function Report({
+  saved,
+  onReset,
+  onRefresh,
+}: {
+  saved: SavedReport;
+  onReset: () => void;
+  onRefresh: () => void;
+}) {
   const router = useRouter();
   const [openingChat, setOpeningChat] = useState(false);
   const report = saved.report;
@@ -262,6 +589,8 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
             </h1>
           </div>
           <div className="flex flex-wrap gap-2.5 print:hidden">
+            <FollowButton company={report.company.name} reportId={saved.id} />
+            <ProjectAction saved={saved} />
             <a
               href={`/api/reports/${saved.id}/html`}
               title="Download als nette standalone pagina om te delen"
@@ -281,6 +610,13 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
               className="rounded-lg border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 px-4 py-2 text-sm font-medium text-accent-700 dark:text-accent-300 transition hover:bg-accent-500/20 disabled:opacity-50"
             >
               {openingChat ? "Chat openen…" : "💬 Chat over dit rapport"}
+            </button>
+            <button
+              onClick={onRefresh}
+              title="Voer het onderzoek opnieuw uit en zie wat er veranderd is"
+              className="rounded-lg border border-slate-900/15 dark:border-white/15 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 transition hover:border-accent-400/50 hover:text-slate-900 dark:hover:text-white"
+            >
+              ↻ Ververs analyse
             </button>
             <button
               onClick={onReset}
@@ -304,6 +640,9 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
           </dl>
         )}
       </header>
+
+      {/* Wat is er veranderd t.o.v. het vorige rapport (na "Ververs analyse") */}
+      <ChangesSince saved={saved} />
 
       {/* Scores */}
       <div className="grid gap-6 sm:grid-cols-2">
@@ -423,6 +762,15 @@ function Report({ saved, onReset }: { saved: SavedReport; onReset: () => void })
         </div>
       </section>
 
+      {/* Waarschuwing: rapport kwam zonder live webzoeken tot stand */}
+      {saved.webSearchUsed === false && (
+        <div className="rounded-2xl border border-amber-600/40 dark:border-amber-500/30 bg-amber-500/10 p-5 text-sm leading-relaxed text-amber-800 dark:text-amber-200">
+          <strong>Let op:</strong> dit rapport is zonder live webzoeken opgesteld en is
+          gebaseerd op de algemene kennis van het model, zonder bronvermeldingen.
+          Controleer belangrijke feiten zelf of voer de analyse opnieuw uit.
+        </div>
+      )}
+
       {/* Bronnen */}
       {saved.citations.length > 0 && (
         <SectionCard kicker="Bronnen" title="Gebruikte bronnen" className="animate-fade-up [animation-delay:0.32s]">
@@ -474,7 +822,11 @@ function ResearchView() {
   const [saved, setSaved] = useState<SavedReport | null>(null);
   const [error, setError] = useState("");
   const [analyzedCompany, setAnalyzedCompany] = useState("");
+  // Live voortgang uit de NDJSON-stream: huidige fase + gevonden bronnen.
+  const [liveStatus, setLiveStatus] = useState("");
+  const [liveSources, setLiveSources] = useState<LiveSource[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Reset direct tijdens de render wanneer het rapport uit de URL verdwijnt
   // (bv. via "Nieuwe analyse" of de sidebar).
@@ -508,27 +860,136 @@ function ResearchView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportId]);
 
-  async function analyze(name: string) {
+  async function analyze(name: string, previousReportId?: string) {
     const trimmed = name.trim();
     if (trimmed.length < 2 || status === "loading") return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setStatus("loading");
     setAnalyzedCompany(trimmed);
     setError("");
+    setLiveStatus("Analyse starten…");
+    setLiveSources([]);
     try {
       const res = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company: trimmed }),
+        body: JSON.stringify({ company: trimmed, ...(previousReportId ? { previousReportId } : {}) }),
+        signal: controller.signal,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Onbekende fout");
-      setSaved(data.saved);
-      setStatus("done");
-      window.dispatchEvent(new Event(REPORTS_UPDATED_EVENT));
-      router.replace(`/research?report=${data.saved.id}`, { scroll: false });
+
+      // Fouten vóór de stream (validatie, ontbrekende API-sleutel) komen als
+      // gewone JSON-respons met een foutstatus binnen.
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Onbekende fout");
+      }
+      if (!res.body) throw new Error("Geen antwoord van de server");
+
+      // NDJSON-stream regel voor regel uitlezen: elke regel is één event.
+      let finished = false;
+      const handleLine = (line: string) => {
+        if (!line.trim()) return;
+        let event: ResearchStreamEvent;
+        try {
+          event = JSON.parse(line) as ResearchStreamEvent;
+        } catch {
+          return; // halve/onleesbare regel — negeren
+        }
+        if (event.type === "status" && typeof event.text === "string") {
+          setLiveStatus(event.text);
+        } else if (event.type === "source" && typeof event.url === "string") {
+          const source: LiveSource = { url: event.url, title: event.title || event.url };
+          setLiveSources((prev) =>
+            prev.some((s) => s.url === source.url) ? prev : [...prev, source]
+          );
+        } else if (event.type === "done" && event.saved) {
+          finished = true;
+          const savedReport = event.saved;
+          setSaved(savedReport);
+          setStatus("done");
+          window.dispatchEvent(new Event(REPORTS_UPDATED_EVENT));
+          router.replace(`/research?report=${savedReport.id}`, { scroll: false });
+        } else if (event.type === "error") {
+          throw new Error(event.error || "Onbekende fout");
+        }
+      };
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, newlineIndex);
+          buffer = buffer.slice(newlineIndex + 1);
+          handleLine(line);
+        }
+      }
+      handleLine(buffer);
+
+      if (!finished) {
+        throw new Error("De verbinding werd onderbroken. Probeer het opnieuw.");
+      }
     } catch (err) {
+      // Zelf geannuleerd: terug naar het invoerscherm, zonder foutmelding.
+      if (controller.signal.aborted) {
+        setStatus("idle");
+        setTimeout(() => inputRef.current?.focus(), 0);
+        return;
+      }
       setError(err instanceof Error ? err.message : "Er ging iets mis");
       setStatus("error");
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+    }
+  }
+
+  function cancelAnalysis() {
+    abortRef.current?.abort();
+  }
+
+  // "Ververs analyse": zelfde bedrijf opnieuw onderzoeken, gekoppeld aan het
+  // huidige rapport zodat de vergelijking getoond kan worden.
+  function refreshAnalysis() {
+    if (!saved) return;
+    router.replace("/research", { scroll: false });
+    setSaved(null);
+    analyze(saved.company, saved.id);
+  }
+
+  // Vanuit de onboarding (dashboard) kan een analyse direct meegegeven
+  // worden via ?company=… — één keer automatisch starten.
+  const companyParam = searchParams.get("company");
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!companyParam || autoStarted.current || status !== "idle") return;
+    autoStarted.current = true;
+    setCompany(companyParam);
+    analyze(companyParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyParam]);
+
+  // Bij een tegoed-/configuratiefout is demo-modus het gratis alternatief.
+  const offerDemo = /tegoed|AI-verbinding/i.test(error);
+  const [enablingDemo, setEnablingDemo] = useState(false);
+  async function enableDemoAndRetry() {
+    if (enablingDemo) return;
+    setEnablingDemo(true);
+    try {
+      const res = await fetch("/api/settings");
+      const data = await res.json();
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data.settings, demoMode: true }),
+      });
+      analyze(analyzedCompany || company);
+    } finally {
+      setEnablingDemo(false);
     }
   }
 
@@ -544,7 +1005,7 @@ function ResearchView() {
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 sm:px-8">
       {status === "done" && saved ? (
-        <Report saved={saved} onReset={reset} />
+        <Report saved={saved} onReset={reset} onRefresh={refreshAnalysis} />
       ) : (
         <div className="flex flex-col items-center pt-20 sm:pt-28">
           <div className="animate-fade-up flex max-w-2xl flex-col items-center text-center">
@@ -605,14 +1066,41 @@ function ResearchView() {
               </div>
 
               {status === "error" && (
-                <p className="mt-5 rounded-xl border border-red-600/30 dark:border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm text-red-700 dark:text-red-300">
-                  {error}
-                </p>
+                <div className="mt-5 rounded-xl border border-red-600/30 dark:border-red-500/30 bg-red-500/10 px-4 py-3 text-center">
+                  <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+                  <div className="mt-2.5 flex flex-wrap justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => analyze(analyzedCompany || company)}
+                      className="rounded-lg border border-red-600/30 dark:border-red-500/30 px-4 py-1.5 text-sm font-medium text-red-700 dark:text-red-300 transition hover:bg-red-500/10"
+                    >
+                      ↻ Probeer opnieuw
+                    </button>
+                    {offerDemo && (
+                      <button
+                        type="button"
+                        onClick={enableDemoAndRetry}
+                        disabled={enablingDemo}
+                        title="Genereert een voorbeeldrapport zonder API-kosten, zodat je de app kunt verkennen"
+                        className="rounded-lg border border-accent-600/30 dark:border-accent-500/30 bg-accent-500/10 px-4 py-1.5 text-sm font-medium text-accent-700 dark:text-accent-300 transition hover:bg-accent-500/20 disabled:opacity-50"
+                      >
+                        {enablingDemo ? "Demo starten…" : "Gratis verkennen met demo-modus"}
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
             </form>
           )}
 
-          {status === "loading" && <LoadingState company={analyzedCompany} />}
+          {status === "loading" && (
+            <LoadingState
+              company={analyzedCompany}
+              statusText={liveStatus}
+              sources={liveSources}
+              onCancel={cancelAnalysis}
+            />
+          )}
 
           {status !== "loading" && (
             <div

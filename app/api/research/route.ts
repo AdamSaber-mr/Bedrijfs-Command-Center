@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { RESEARCH_SCHEMA, type ResearchReport } from "@/lib/research";
-import { saveReport, type Citation } from "@/lib/reportStore";
+import { getReport, saveReport, type Citation } from "@/lib/reportStore";
 import { getSettings } from "@/lib/settings";
 
 // Demo-modus: een herkenbaar voorbeeldrapport zodat de hele research-flow
@@ -76,6 +76,77 @@ function userPrompt(company: string) {
   return `Maak een volledige business-analyse van het bedrijf "${company}". Onderzoek de marktpositie, de belangrijkste concurrenten, de partnership-fit en de risico's.`;
 }
 
+// NDJSON-events die de route naar de client stuurt (één JSON-object per regel):
+// {type:"status", text}            — fase-overgang in de analyse
+// {type:"source", url, title}      — live gevonden webbron (gededupliceerd)
+// {type:"done", saved}             — het opgeslagen rapport
+// {type:"error", error, status}    — fout, met dezelfde teksten/semantiek als voorheen
+type Emit = (event: Record<string, unknown>) => void;
+
+// Bundelt status-deduplicatie (alleen bij fase-overgang sturen) en
+// bron-deduplicatie op URL over álle beurten heen.
+function makeProgress(emit: Emit) {
+  let lastStatus = "";
+  const seenUrls = new Set<string>();
+  return {
+    status(text: string) {
+      if (text === lastStatus) return;
+      lastStatus = text;
+      emit({ type: "status", text });
+    },
+    source(url: unknown, title: unknown) {
+      if (typeof url !== "string" || !url || seenUrls.has(url)) return;
+      seenUrls.add(url);
+      emit({
+        type: "source",
+        url,
+        title: typeof title === "string" && title ? title : url,
+      });
+    },
+  };
+}
+type Progress = ReturnType<typeof makeProgress>;
+
+// Verpakt het werk in een NDJSON-stream (application/x-ndjson). Fouten ná de
+// start van de stream gaan als {type:"error"}-regel naar de client, omdat de
+// HTTP-status dan al verstuurd is.
+function ndjsonStream(run: (emit: Emit) => Promise<void>): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const emit: Emit = (event) => {
+        try {
+          controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+        } catch {
+          // Client heeft de verbinding gesloten (bv. geannuleerd) — negeren.
+        }
+      };
+      try {
+        await run(emit);
+      } catch (err) {
+        console.error("Research stream error:", err);
+        emit({
+          type: "error",
+          error: "Er ging iets mis bij het genereren van de analyse. Probeer het opnieuw.",
+          status: 500,
+        });
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          // al gesloten
+        }
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 function extractReport(response: Anthropic.Message): ResearchReport {
   // Bij structured outputs bevat het laatste tekstblok de gevalideerde JSON;
   // eerdere tekstblokken kunnen tussenliggende zoek-narratie bevatten.
@@ -129,12 +200,70 @@ function extractCitations(allContent: Anthropic.ContentBlock[]): Citation[] {
   return [...seen.values()].slice(0, 12);
 }
 
-async function runAnalysis(client: Anthropic, company: string, useWebSearch: boolean) {
+// Cache-breakpoint op het laatste assistant-tekstblok bij continuaties
+// (multi-turn patroon uit de caching-documentatie). Alleen op tekstblokken:
+// thinking- en server-tool-blokken accepteren geen cache_control.
+function withCacheBreakpoint(
+  content: Anthropic.ContentBlock[]
+): Anthropic.ContentBlockParam[] {
+  const last = content[content.length - 1];
+  if (!last || last.type !== "text") return content;
+  return [
+    ...content.slice(0, -1),
+    { ...last, cache_control: { type: "ephemeral" } } as Anthropic.ContentBlockParam,
+  ];
+}
+
+// Eén modelbeurt streamen: leidt live voortgang af uit echte stream-events
+// (server_tool_use = zoeken, web_search_tool_result = resultaten binnen,
+// text = rapport schrijven) en levert daarna het volledige bericht op.
+async function streamTurn(
+  client: Anthropic,
+  params: Anthropic.MessageStreamParams,
+  progress: Progress
+): Promise<Anthropic.Message> {
+  const stream = client.messages.stream(params);
+  for await (const event of stream) {
+    if (event.type !== "content_block_start") continue;
+    const block = event.content_block;
+    if (block.type === "thinking") {
+      progress.status("Informatie afwegen…");
+    } else if (block.type === "server_tool_use") {
+      progress.status("Web doorzoeken…");
+    } else if (block.type === "web_search_tool_result") {
+      progress.status("Bronnen lezen…");
+      if (Array.isArray(block.content)) {
+        for (const item of block.content) {
+          if (item.type === "web_search_result") progress.source(item.url, item.title);
+        }
+      }
+    } else if (block.type === "text") {
+      progress.status("Rapport samenstellen…");
+    }
+  }
+  return stream.finalMessage();
+}
+
+async function runAnalysis(
+  client: Anthropic,
+  company: string,
+  useWebSearch: boolean,
+  progress: Progress
+) {
   const baseParams = {
     model: MODEL,
     max_tokens: 16000,
     thinking: { type: "adaptive" as const },
-    system: SYSTEM_PROMPT,
+    // Prompt caching: system als blok-array met cache_control op het laatste
+    // blok — scheelt vooral bij pause_turn-continuaties en de fallback-retry,
+    // waar dezelfde prefix opnieuw wordt ingestuurd.
+    system: [
+      {
+        type: "text" as const,
+        text: SYSTEM_PROMPT,
+        cache_control: { type: "ephemeral" as const },
+      },
+    ],
     output_config: {
       format: {
         type: "json_schema" as const,
@@ -142,30 +271,39 @@ async function runAnalysis(client: Anthropic, company: string, useWebSearch: boo
       },
     },
   };
-
-  let messages: Anthropic.MessageParam[] = [
-    { role: "user", content: userPrompt(company) },
+  const tools = [
+    { type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 6 },
   ];
+  const firstMessage: Anthropic.MessageParam = {
+    role: "user",
+    content: userPrompt(company),
+  };
 
-  let response = await client.messages.create({
-    ...baseParams,
-    messages,
-    ...(useWebSearch
-      ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 6 }] }
-      : {}),
-  });
+  let response = await streamTurn(
+    client,
+    { ...baseParams, messages: [firstMessage], ...(useWebSearch ? { tools } : {}) },
+    progress
+  );
 
-  // Server-side tools kunnen pauzeren; opnieuw insturen om te hervatten.
+  // Server-side tools kunnen pauzeren; opnieuw streamen om te hervatten.
   // Bewaar de content van álle beurten, zodat citaties niet verloren gaan.
+  // De messages worden per beurt opnieuw opgebouwd zodat alleen de laatste
+  // assistant-beurt een cache-breakpoint draagt (max 4 breakpoints per request).
   let allContent: Anthropic.ContentBlock[] = [...response.content];
+  const assistantTurns: Anthropic.ContentBlock[][] = [];
   let continuations = 0;
   while (response.stop_reason === "pause_turn" && continuations < 4) {
-    messages = [...messages, { role: "assistant", content: response.content }];
-    response = await client.messages.create({
-      ...baseParams,
-      messages,
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 6 }],
-    });
+    progress.status("Onderzoek hervatten…");
+    assistantTurns.push(response.content);
+    const messages: Anthropic.MessageParam[] = [
+      firstMessage,
+      ...assistantTurns.map((content, i) => ({
+        role: "assistant" as const,
+        content:
+          i === assistantTurns.length - 1 ? withCacheBreakpoint(content) : content,
+      })),
+    ];
+    response = await streamTurn(client, { ...baseParams, messages, tools }, progress);
     allContent = [...allContent, ...response.content];
     continuations++;
   }
@@ -174,9 +312,9 @@ async function runAnalysis(client: Anthropic, company: string, useWebSearch: boo
 }
 
 export async function POST(request: Request) {
-  let company: unknown;
+  let company: unknown, previousReportId: unknown;
   try {
-    ({ company } = await request.json());
+    ({ company, previousReportId } = await request.json());
   } catch {
     return NextResponse.json({ error: "Ongeldige aanvraag" }, { status: 400 });
   }
@@ -191,20 +329,49 @@ export async function POST(request: Request) {
   const name = company.trim().slice(0, 120);
   const settings = await getSettings();
 
+  // "Ververs analyse": koppel het nieuwe rapport aan het vorige, zodat de
+  // UI kan tonen wat er veranderd is. Het project erft mee.
+  let refreshMeta: { previousReportId?: string; projectId?: string } | undefined;
+  if (typeof previousReportId === "string" && /^[a-zA-Z0-9-]+$/.test(previousReportId)) {
+    const previous = await getReport(previousReportId);
+    if (previous) {
+      refreshMeta = { previousReportId, projectId: previous.projectId };
+    }
+  }
+
   if (settings.demoMode) {
-    // Kleine vertraging zodat de laad-ervaring realistisch blijft.
-    await new Promise((r) => setTimeout(r, 1500));
-    const saved = await saveReport(name, demoReport(name), [
-      { url: "https://example.com/demo-bron", title: "Demo-bron (voorbeeld, geen echte data)" },
-    ]);
-    return NextResponse.json({ saved });
+    // Demo-modus: simuleer een paar voortgangs-events met korte vertragingen,
+    // zodat de laad-ervaring realistisch blijft.
+    return ndjsonStream(async (emit) => {
+      const progress = makeProgress(emit);
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      progress.status("Web doorzoeken…");
+      await wait(600);
+      progress.source(
+        "https://example.com/demo-bron",
+        "Demo-bron (voorbeeld, geen echte data)"
+      );
+      await wait(400);
+      progress.status("Bronnen lezen…");
+      await wait(400);
+      progress.status("Rapport samenstellen…");
+      await wait(500);
+      const saved = await saveReport(
+        name,
+        demoReport(name),
+        [{ url: "https://example.com/demo-bron", title: "Demo-bron (voorbeeld, geen echte data)" }],
+        true,
+        refreshMeta
+      );
+      emit({ type: "done", saved });
+    });
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
       {
         error:
-          "ANTHROPIC_API_KEY ontbreekt. Voeg deze toe aan .env.local, of zet demo-modus aan via Instellingen.",
+          "De AI-verbinding is nog niet ingesteld. Zet demo-modus aan via Instellingen, of vraag de beheerder de API-sleutel te configureren.",
       },
       { status: 500 }
     );
@@ -212,61 +379,86 @@ export async function POST(request: Request) {
 
   const client = new Anthropic();
 
-  try {
-    let result: Awaited<ReturnType<typeof runAnalysis>>;
+  return ndjsonStream(async (emit) => {
+    const progress = makeProgress(emit);
     try {
-      result = await runAnalysis(client, name, true);
-    } catch (err) {
-      // Mocht de combinatie webzoeken + structured output geweigerd worden,
-      // val dan terug op een analyse zonder webzoeken. Billing-fouten
-      // hebben daar niets aan, dus die gaan direct door naar de foutafhandeling.
-      if (err instanceof Anthropic.BadRequestError && !err.message.includes("credit balance")) {
-        result = await runAnalysis(client, name, false);
-      } else {
-        throw err;
+      progress.status("Analyse starten…");
+      let result: Awaited<ReturnType<typeof runAnalysis>>;
+      let webSearchUsed = true;
+      try {
+        result = await runAnalysis(client, name, true, progress);
+      } catch (err) {
+        // Mocht de combinatie webzoeken + structured output geweigerd worden,
+        // val dan terug op een analyse zonder webzoeken. Billing-fouten
+        // hebben daar niets aan, dus die gaan direct door naar de foutafhandeling.
+        if (err instanceof Anthropic.BadRequestError && !err.message.includes("credit balance")) {
+          progress.status("Opnieuw proberen zonder webzoeken…");
+          result = await runAnalysis(client, name, false, progress);
+          webSearchUsed = false;
+        } else {
+          throw err;
+        }
       }
-    }
 
-    const { response, allContent } = result;
-    if (response.stop_reason === "refusal") {
-      return NextResponse.json(
-        { error: "Deze aanvraag kon niet worden verwerkt. Probeer een andere bedrijfsnaam." },
-        { status: 422 }
-      );
-    }
-    if (response.stop_reason === "max_tokens") {
-      return NextResponse.json(
-        { error: "De analyse werd afgekapt. Probeer het opnieuw." },
-        { status: 502 }
-      );
-    }
+      const { response, allContent } = result;
+      if (response.stop_reason === "refusal") {
+        emit({
+          type: "error",
+          error: "Deze aanvraag kon niet worden verwerkt. Probeer een andere bedrijfsnaam.",
+          status: 422,
+        });
+        return;
+      }
+      if (response.stop_reason === "max_tokens") {
+        emit({
+          type: "error",
+          error: "De analyse werd afgekapt. Probeer het opnieuw.",
+          status: 502,
+        });
+        return;
+      }
 
-    const report = extractReport(response);
-    const saved = await saveReport(name, report, extractCitations(allContent));
-    return NextResponse.json({ saved });
-  } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) {
-      return NextResponse.json(
-        { error: "Ongeldige API-sleutel. Controleer ANTHROPIC_API_KEY in .env.local" },
-        { status: 500 }
+      progress.status("Rapport opslaan…");
+      const report = extractReport(response);
+      const saved = await saveReport(
+        name,
+        report,
+        extractCitations(allContent),
+        webSearchUsed,
+        refreshMeta
       );
+      emit({ type: "done", saved });
+    } catch (err) {
+      if (err instanceof Anthropic.AuthenticationError) {
+        emit({
+          type: "error",
+          error: "De API-sleutel is ongeldig. Vraag de beheerder de configuratie te controleren.",
+          status: 500,
+        });
+        return;
+      }
+      if (err instanceof Anthropic.APIError && err.message.includes("credit balance")) {
+        emit({
+          type: "error",
+          error: "Onvoldoende tegoed op je Anthropic-account. Koop credits via platform.claude.com → Plans & Billing.",
+          status: 402,
+        });
+        return;
+      }
+      if (err instanceof Anthropic.RateLimitError) {
+        emit({
+          type: "error",
+          error: "Te veel aanvragen. Wacht even en probeer het opnieuw.",
+          status: 429,
+        });
+        return;
+      }
+      console.error("Research API error:", err);
+      emit({
+        type: "error",
+        error: "Er ging iets mis bij het genereren van de analyse. Probeer het opnieuw.",
+        status: 500,
+      });
     }
-    if (err instanceof Anthropic.APIError && err.message.includes("credit balance")) {
-      return NextResponse.json(
-        { error: "Onvoldoende tegoed op je Anthropic-account. Koop credits via platform.claude.com → Plans & Billing." },
-        { status: 402 }
-      );
-    }
-    if (err instanceof Anthropic.RateLimitError) {
-      return NextResponse.json(
-        { error: "Te veel aanvragen. Wacht even en probeer het opnieuw." },
-        { status: 429 }
-      );
-    }
-    console.error("Research API error:", err);
-    return NextResponse.json(
-      { error: "Er ging iets mis bij het genereren van de analyse. Probeer het opnieuw." },
-      { status: 500 }
-    );
-  }
+  });
 }
