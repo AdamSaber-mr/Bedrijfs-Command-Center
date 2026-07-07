@@ -41,6 +41,17 @@ function prune(sessions: SessionMap): boolean {
   return changed;
 }
 
+// Pure check: bestaat het token in data/sessions.json en is het niet verlopen?
+// Bewust zonder next/headers, zodat ook de proxy (Node-runtime sinds Next 16)
+// dit kan gebruiken. Leesfouten (bv. ontbrekend bestand) vangt readSessions al
+// af en tellen als "geen geldige sessies".
+export async function isValidSessionToken(token: string): Promise<boolean> {
+  if (!token) return false;
+  const sessions = await readSessions();
+  const session = sessions[token];
+  return session !== undefined && !isExpired(session.createdAt);
+}
+
 export async function createSession(userId: string): Promise<string> {
   const token = randomBytes(32).toString("hex");
   const sessions = await readSessions();
