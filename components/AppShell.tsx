@@ -12,10 +12,12 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ChatSummary } from "@/lib/chatStore";
 import type { ReportSummary } from "@/lib/reportStore";
+import type { Watch } from "@/lib/watchStore";
 import {
   ACCOUNT_UPDATED_EVENT,
   CHATS_UPDATED_EVENT,
   REPORTS_UPDATED_EVENT,
+  WATCHES_UPDATED_EVENT,
 } from "@/lib/events";
 import {
   Icon,
@@ -69,6 +71,150 @@ function relativeDay(iso: string) {
   if (diffDays === 1) return "Gisteren";
   if (diffDays < 7) return "Deze week";
   return "Ouder";
+}
+
+// Compacte relatieve tijd voor het updates-paneel.
+function relativeTimeShort(iso: string) {
+  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutes < 1) return "zojuist";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} uur`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "gisteren";
+  if (days < 7) return `${days} dgn`;
+  return new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+}
+
+/* ---------- Updates-paneel (dealbewaking) ---------- */
+
+// Alle updates van gevolgde bedrijven, nieuwste eerst. Klikken opent het
+// bijbehorende rapport; "Alles gelezen" wist de badge op de bel.
+function UpdatesPanel({
+  watches,
+  onClose,
+}: {
+  watches: Watch[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const items = watches
+    .flatMap((w) => w.updates.map((u) => ({ watch: w, update: u })))
+    .sort((a, b) => b.update.foundAt.localeCompare(a.update.foundAt))
+    .slice(0, 25);
+  const unread = items.filter((i) => !i.update.read).length;
+
+  async function markAllRead() {
+    await fetch("/api/watches/read", { method: "POST" });
+    window.dispatchEvent(new Event(WATCHES_UPDATED_EVENT));
+  }
+
+  const impactClass = (impact: string) =>
+    impact === "hoog"
+      ? "bg-red-500/10 text-red-700 dark:text-red-300"
+      : impact === "middel"
+        ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+        : "bg-slate-500/10 text-slate-600 dark:text-slate-400";
+
+  return (
+    <div
+      className="animate-fade-in fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 px-4 pt-[10vh] backdrop-blur-sm dark:bg-black/60"
+      onClick={onClose}
+    >
+      <div
+        className="animate-scale-in flex max-h-[70vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-900/10 bg-white shadow-2xl shadow-slate-900/20 dark:border-white/10 dark:bg-[#0d1526] dark:shadow-black/60"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-slate-900/10 px-5 py-3.5 dark:border-white/10">
+          <h2 className="font-[family-name:var(--font-display)] text-base font-semibold text-slate-900 dark:text-slate-100">
+            Updates
+            {unread > 0 && (
+              <span className="ml-2 rounded-full bg-accent-500/15 px-2 py-0.5 text-xs font-medium text-accent-700 dark:text-accent-300">
+                {unread} nieuw
+              </span>
+            )}
+          </h2>
+          {unread > 0 && (
+            <button
+              onClick={markAllRead}
+              className="text-xs font-medium text-accent-700 hover:underline dark:text-accent-300"
+            >
+              Alles gelezen
+            </button>
+          )}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          {items.length === 0 && (
+            <div className="px-4 py-10 text-center">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Nog geen updates
+              </p>
+              <p className="mx-auto mt-1.5 max-w-xs text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                Volg een bedrijf via de knop <strong>Volg bedrijf</strong> op een
+                deal-rapport. Vantage checkt gevolgde bedrijven dagelijks op
+                dealrelevant nieuws en verzamelt het hier.
+              </p>
+            </div>
+          )}
+          {items.map(({ watch, update }) => (
+            <button
+              key={update.id}
+              onClick={() => {
+                if (watch.reportId) {
+                  router.push(`/research?report=${watch.reportId}`);
+                  onClose();
+                }
+              }}
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-900/5 dark:hover:bg-white/5"
+            >
+              <span
+                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                  update.read ? "bg-transparent" : "bg-accent-500"
+                }`}
+                aria-label={update.read ? undefined : "Ongelezen"}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="truncate text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    {watch.company}
+                  </span>
+                  <span className={`shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${impactClass(update.impact)}`}>
+                    {update.impact}
+                  </span>
+                  <span className="ml-auto shrink-0 text-[10px] text-slate-400 dark:text-slate-600">
+                    {relativeTimeShort(update.foundAt)}
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-sm font-medium leading-snug text-slate-900 dark:text-slate-100">
+                  {update.headline}
+                </span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                  {update.summary}
+                </span>
+                {update.sourceUrl && (
+                  <a
+                    href={update.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-1 inline-block max-w-full truncate text-[11px] text-accent-700 hover:underline dark:text-accent-300"
+                  >
+                    {update.sourceTitle || update.sourceUrl} ↗
+                  </a>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <p className="border-t border-slate-900/10 px-5 py-3 text-[11px] leading-relaxed text-slate-400 dark:border-white/10 dark:text-slate-500">
+          Gevolgde bedrijven worden automatisch gecheckt zodra je het dashboard
+          opent (maximaal één keer per dag per bedrijf).
+        </p>
+      </div>
+    </div>
+  );
 }
 
 /* ---------- Command palette (⌘K) ---------- */
@@ -186,7 +332,7 @@ function CommandPalette({
       {
         id: "export",
         group: "Acties",
-        label: "Exporteer trainingsdata",
+        label: "Exporteer gesprekken",
         hint: "JSONL",
         icon: ICONS.download,
         run: () => {
@@ -441,9 +587,11 @@ function Sidebar({
   resizing = false,
   userName,
   userEmail,
+  unreadUpdates = 0,
   onToggleCollapse,
   onNavigate,
   onOpenPalette,
+  onOpenUpdates,
   onOpenSettings,
   onOpenShortcuts,
   onLogout,
@@ -457,9 +605,11 @@ function Sidebar({
   resizing?: boolean;
   userName: string;
   userEmail: string;
+  unreadUpdates?: number;
   onToggleCollapse?: () => void;
   onNavigate?: () => void;
   onOpenPalette: () => void;
+  onOpenUpdates: () => void;
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
   onLogout: () => void;
@@ -734,6 +884,23 @@ function Sidebar({
           >
             <Icon d={ICONS.search} className="h-[18px] w-[18px]" />
           </button>
+          <button
+            onClick={onOpenUpdates}
+            aria-label={
+              unreadUpdates > 0
+                ? `Updates van gevolgde bedrijven (${unreadUpdates} nieuw)`
+                : "Updates van gevolgde bedrijven"
+            }
+            title="Updates van gevolgde bedrijven"
+            className="relative rounded-md p-1.5 text-slate-500 transition hover:bg-slate-900/5 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-100"
+          >
+            <Icon d={ICONS.bell} className="h-[18px] w-[18px]" />
+            {unreadUpdates > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-500 px-1 text-[10px] font-semibold text-accent-950">
+                {unreadUpdates > 9 ? "9+" : unreadUpdates}
+              </span>
+            )}
+          </button>
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
@@ -906,8 +1073,8 @@ function Sidebar({
 
           {chats.length === 0 && (
             <p className="px-3 py-4 text-xs leading-relaxed text-slate-400 dark:text-slate-600">
-              Nog geen chats. Start hierboven een nieuwe chat — elk gesprek wordt
-              automatisch opgeslagen als trainingsdata.
+              Nog geen chats. Start hierboven een nieuwe chat — elk gesprek
+              wordt automatisch bewaard.
             </p>
           )}
           {pinnedChats.length > 0 && (
@@ -960,7 +1127,7 @@ function Sidebar({
                 />
                 <MenuItem
                   icon={ICONS.download}
-                  label="Exporteer trainingsdata"
+                  label="Exporteer gesprekken"
                   onClick={() => {
                     setAccountMenuOpen(false);
                     window.location.assign("/api/export");
@@ -1015,8 +1182,8 @@ function Sidebar({
         <div className="mt-auto flex flex-col items-center gap-1 border-t border-slate-900/10 p-2 dark:border-white/10">
           <a
             href="/api/export"
-            title="Exporteer trainingsdata"
-            aria-label="Exporteer trainingsdata"
+            title="Exporteer gesprekken"
+            aria-label="Exporteer gesprekken"
             className="flex w-full justify-center rounded-lg py-2 text-slate-500 transition hover:bg-slate-900/5 hover:text-accent-700 dark:hover:bg-white/5 dark:hover:text-accent-300"
           >
             <Icon d={ICONS.download} />
@@ -1186,6 +1353,8 @@ export default function AppShell({
   }
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [reports, setReports] = useState<ReportSummary[]>([]);
+  const [watches, setWatches] = useState<Watch[]>([]);
+  const [updatesOpen, setUpdatesOpen] = useState(false);
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
 
@@ -1209,17 +1378,35 @@ export default function AppShell({
     }
   }, []);
 
+  const refreshWatches = useCallback(async () => {
+    try {
+      const res = await fetch("/api/watches");
+      const data = await res.json();
+      setWatches(data.watches ?? []);
+    } catch {
+      // bel mag stil falen
+    }
+  }, []);
+
   useEffect(() => {
     window.addEventListener(CHATS_UPDATED_EVENT, refreshChats);
     window.addEventListener(REPORTS_UPDATED_EVENT, refreshReports);
+    window.addEventListener(WATCHES_UPDATED_EVENT, refreshWatches);
     // Eerste lading via dezelfde event-route als latere updates.
     window.dispatchEvent(new Event(CHATS_UPDATED_EVENT));
     window.dispatchEvent(new Event(REPORTS_UPDATED_EVENT));
+    window.dispatchEvent(new Event(WATCHES_UPDATED_EVENT));
     return () => {
       window.removeEventListener(CHATS_UPDATED_EVENT, refreshChats);
       window.removeEventListener(REPORTS_UPDATED_EVENT, refreshReports);
+      window.removeEventListener(WATCHES_UPDATED_EVENT, refreshWatches);
     };
-  }, [refreshChats, refreshReports]);
+  }, [refreshChats, refreshReports, refreshWatches]);
+
+  const unreadUpdates = watches.reduce(
+    (sum, w) => sum + w.updates.filter((u) => !u.read).length,
+    0
+  );
 
   // Naam en e-mail van het ingelogde account voor de account-rij.
   const refreshAccount = useCallback(async () => {
@@ -1370,8 +1557,10 @@ export default function AppShell({
           resizing={resizing}
           userName={userName}
           userEmail={userEmail}
+          unreadUpdates={unreadUpdates}
           onToggleCollapse={toggleCollapse}
           onOpenPalette={() => setPaletteOpen(true)}
+          onOpenUpdates={() => setUpdatesOpen(true)}
           onOpenSettings={() => setSettingsTab("profiel")}
           onOpenShortcuts={() => setShortcutsOpen(true)}
           onLogout={logout}
@@ -1400,10 +1589,15 @@ export default function AppShell({
             collapsed={false}
             userName={userName}
             userEmail={userEmail}
+            unreadUpdates={unreadUpdates}
             onNavigate={() => setMobileOpen(false)}
             onOpenPalette={() => {
               setMobileOpen(false);
               setPaletteOpen(true);
+            }}
+            onOpenUpdates={() => {
+              setMobileOpen(false);
+              setUpdatesOpen(true);
             }}
             onOpenSettings={() => setSettingsTab("profiel")}
             onOpenShortcuts={() => {
@@ -1434,6 +1628,18 @@ export default function AppShell({
           <Link href="/">
             <Logo />
           </Link>
+          <button
+            onClick={() => setUpdatesOpen(true)}
+            aria-label="Updates van gevolgde bedrijven"
+            className="relative ml-auto rounded-lg border border-slate-900/15 p-2 text-slate-700 dark:border-white/15 dark:text-slate-300"
+          >
+            <Icon d={ICONS.bell} className="h-4 w-4" />
+            {unreadUpdates > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-500 px-1 text-[10px] font-semibold text-accent-950">
+                {unreadUpdates > 9 ? "9+" : unreadUpdates}
+              </span>
+            )}
+          </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto print:overflow-visible">{children}</div>
@@ -1448,6 +1654,9 @@ export default function AppShell({
         />
       )}
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+      {updatesOpen && (
+        <UpdatesPanel watches={watches} onClose={() => setUpdatesOpen(false)} />
+      )}
       {settingsTab && (
         <SettingsModal
           tab={settingsTab}
