@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-// De hoofdbegroeting is altijd tijdsgebonden mét naam ("Goedemiddag, Adam");
-// daaronder wisselt een korte, Claude-achtige subtitel.
+// De hoofdbegroeting is tijdsgebonden, met de naam van de gebruiker als die
+// bekend is ("Goedemiddag, Sara"); daaronder wisselt een korte subtitel.
 function timeGreeting() {
   const hour = new Date().getHours();
   if (hour < 6) return "Goedenacht";
@@ -12,14 +12,14 @@ function timeGreeting() {
   return "Goedenavond";
 }
 
-export function pickGreeting(name = "Adam"): string {
-  return `${timeGreeting()}, ${name}`;
+export function pickGreeting(name = ""): string {
+  return name ? `${timeGreeting()}, ${name}` : timeGreeting();
 }
 
-export function pickTagline(name = "Adam"): string {
+export function pickTagline(name = ""): string {
   const pool = [
     "Waarmee kan ik je helpen?",
-    `Fijn je weer te zien, ${name}`,
+    ...(name ? [`Fijn je weer te zien, ${name}`] : []),
     "Waar gaan we vandaag aan werken?",
     "Wat kan ik voor je doen?",
     "Klaar wanneer jij het bent",
@@ -36,7 +36,7 @@ export function useGreeting(): { greeting: string; tagline: string } {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      let name = "Adam";
+      let name = "";
       try {
         const res = await fetch("/api/settings");
         const data = await res.json();
@@ -44,7 +44,7 @@ export function useGreeting(): { greeting: string; tagline: string } {
           name = data.settings.name.trim();
         }
       } catch {
-        // instellingen onbereikbaar — val terug op de standaardnaam
+        // instellingen onbereikbaar — begroeting zonder naam
       }
       if (!cancelled) {
         setTexts({ greeting: pickGreeting(name), tagline: pickTagline(name) });

@@ -17,7 +17,7 @@ export async function GET() {
   return new Response(lines.join("\n") + (lines.length ? "\n" : ""), {
     headers: {
       "Content-Type": "application/jsonl; charset=utf-8",
-      "Content-Disposition": `attachment; filename="trainingsdata-${new Date().toISOString().slice(0, 10)}.jsonl"`,
+      "Content-Disposition": `attachment; filename="vantage-gesprekken-${new Date().toISOString().slice(0, 10)}.jsonl"`,
     },
   });
 }

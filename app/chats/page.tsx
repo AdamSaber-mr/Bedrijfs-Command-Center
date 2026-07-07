@@ -88,7 +88,7 @@ function ChatsView() {
             Chats
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {total} {total === 1 ? "gesprek" : "gesprekken"} · automatisch opgeslagen als trainingsdata
+            {total} {total === 1 ? "gesprek" : "gesprekken"} · automatisch bewaard
           </p>
         </div>
         <button

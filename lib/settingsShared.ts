@@ -39,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: "claude-opus-4-8",
   maxTokens: 4096,
   customInstructions: "",
-  name: "Adam",
+  // Leeg = automatisch de voornaam van het account (zie getSettings)
+  name: "",
   demoMode: false,
 };

@@ -645,7 +645,7 @@ export default function SettingsModal({
                   </Row>
                   <Row
                     title="API-verbinding"
-                    description="De Anthropic API-sleutel staat lokaal in .env.local en is hier bewust niet zichtbaar."
+                    description="De API-sleutel wordt veilig op de server bewaard en is hier bewust niet zichtbaar."
                   >
                     <span className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                       <span
@@ -672,8 +672,8 @@ export default function SettingsModal({
               <>
                 <Group>
                   <Row
-                    title="Trainingsdata exporteren"
-                    description={`Alle gesprekken als JSONL in het gangbare finetune-formaat. ${chatCount === null ? "" : `Nu ${chatCount} ${chatCount === 1 ? "chat" : "chats"} opgeslagen.`}`}
+                    title="Gesprekken exporteren"
+                    description={`Alle gesprekken als JSONL-bestand, bruikbaar als archief of in andere tools. ${chatCount === null ? "" : `Nu ${chatCount} ${chatCount === 1 ? "chat" : "chats"} bewaard.`}`}
                   >
                     <a
                       href="/api/export"

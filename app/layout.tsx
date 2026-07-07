@@ -20,7 +20,7 @@ const monoFont = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Vantage",
   description:
-    "Vantage — zakelijke AI-werkplek aangedreven door Claude: chat met opgeslagen gesprekken, deal-research met gestructureerde business-analyses en exporteerbare trainingsdata.",
+    "Vantage — zakelijke AI-werkplek: chat met automatisch bewaarde gesprekken, deal-research met gestructureerde business-analyses en een dealpipeline per project.",
 };
 
 export default function RootLayout({

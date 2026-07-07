@@ -15,6 +15,13 @@ export interface SavedReport {
   createdAt: string;
   report: ResearchReport;
   citations: Citation[];
+  // False als de analyse zonder webzoeken tot stand kwam (fallback op
+  // modelkennis) — de UI toont dan een waarschuwing. Ontbreekt bij oude
+  // rapporten; die worden als "met webzoeken" behandeld.
+  webSearchUsed?: boolean;
+  // Gezet bij "Ververs analyse": het rapport waarvan dit de nieuwe versie
+  // is, zodat de UI kan tonen wat er sindsdien veranderd is.
+  previousReportId?: string;
   // Project waar dit rapport bij hoort
   projectId?: string;
 }
@@ -44,7 +51,9 @@ async function fileFor(id: string): Promise<string> {
 export async function saveReport(
   company: string,
   report: ResearchReport,
-  citations: Citation[]
+  citations: Citation[],
+  webSearchUsed = true,
+  meta?: { previousReportId?: string; projectId?: string }
 ): Promise<SavedReport> {
   const saved: SavedReport = {
     id: randomUUID(),
@@ -52,6 +61,9 @@ export async function saveReport(
     createdAt: new Date().toISOString(),
     report,
     citations,
+    webSearchUsed,
+    ...(meta?.previousReportId ? { previousReportId: meta.previousReportId } : {}),
+    ...(meta?.projectId ? { projectId: meta.projectId } : {}),
   };
   await fs.writeFile(await fileFor(saved.id), JSON.stringify(saved, null, 2), "utf-8");
   return saved;

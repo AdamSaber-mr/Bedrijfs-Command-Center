@@ -235,8 +235,8 @@ function NotesView() {
               Notities
             </p>
             <p className="mt-2 max-w-sm text-sm text-slate-500 dark:text-slate-400">
-              Selecteer links een notitie of maak een nieuwe aan. Alles wordt automatisch
-              lokaal opgeslagen in <code>data/notes/</code>.
+              Selecteer links een notitie of maak een nieuwe aan. Alles wordt
+              automatisch bewaard terwijl je typt.
             </p>
             <button
               onClick={newNote}

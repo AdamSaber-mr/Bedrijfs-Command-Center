@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Vantage",
     short_name: "Vantage",
     description:
-      "Vantage — zakelijke AI-werkplek: chat, deal-research, notities en trainingsdata.",
+      "Vantage — zakelijke AI-werkplek: chat, deal-research, projecten en notities.",
     start_url: "/",
     display: "standalone",
     background_color: "#0a0f1a",

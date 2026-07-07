@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { requireUserId, userRoot } from "./auth";
+import { findById } from "./users";
 import {
   DEFAULT_SETTINGS,
   MAX_TOKENS_OPTIONS,
@@ -18,12 +19,24 @@ async function settingsFile(): Promise<string> {
 }
 
 export async function getSettings(): Promise<Settings> {
+  let settings: Settings;
   try {
     const raw = JSON.parse(await fs.readFile(await settingsFile(), "utf-8"));
-    return sanitize(raw);
+    settings = sanitize(raw);
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    settings = { ...DEFAULT_SETTINGS };
   }
+  // Geen AI-naam ingesteld: gebruik de voornaam van het account, zodat de
+  // begroeting en systeemprompt altijd op de echte gebruiker slaan.
+  if (!settings.name) {
+    try {
+      const user = await findById(await requireUserId());
+      settings.name = user?.name.trim().split(/\s+/)[0] ?? "";
+    } catch {
+      // niet ingelogd of account onvindbaar — begroeting blijft zonder naam
+    }
+  }
+  return settings;
 }
 
 export async function saveSettings(input: unknown): Promise<Settings> {
