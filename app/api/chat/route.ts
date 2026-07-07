@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getChat, newChat, saveChat, type ChatAttachment, type ChatMessage } from "@/lib/chatStore";
-import { getProject } from "@/lib/projectStore";
+import { getProject, type Project, type ProjectDocument } from "@/lib/projectStore";
 import { getSettings } from "@/lib/settings";
 import { MODEL_OPTIONS } from "@/lib/settingsShared";
 
@@ -48,6 +48,30 @@ function sanitizeAttachments(input: unknown): ChatAttachment[] | { error: string
   return result;
 }
 
+// Zet een bestand (bijlage of projectdocument) om naar een content block:
+// PDF → document-block, afbeelding → image-block, tekst → gedecodeerd tekstblok.
+function fileBlock(file: { name: string; mediaType: string; data: string }): Anthropic.ContentBlockParam {
+  if (file.mediaType === "application/pdf") {
+    return {
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: file.data },
+    };
+  }
+  if ((IMAGE_TYPES as readonly string[]).includes(file.mediaType)) {
+    return {
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: file.mediaType as (typeof IMAGE_TYPES)[number],
+        data: file.data,
+      },
+    };
+  }
+  // Tekstbestand: inhoud decoderen en als tekstblok meesturen.
+  const text = Buffer.from(file.data, "base64").toString("utf-8").slice(0, 200_000);
+  return { type: "text", text: `Inhoud van bijlage "${file.name}":\n\n${text}` };
+}
+
 // Bouwt de API-berichten: tekst blijft een string; berichten met bijlagen
 // worden content blocks (document/afbeelding vóór het tekstblok).
 function toApiMessages(messages: ChatMessage[]): Anthropic.MessageParam[] {
@@ -55,39 +79,59 @@ function toApiMessages(messages: ChatMessage[]): Anthropic.MessageParam[] {
     if (m.role !== "user" || !m.attachments?.length) {
       return { role: m.role, content: m.content };
     }
-    const blocks: Anthropic.ContentBlockParam[] = [];
-    for (const att of m.attachments) {
-      if (att.mediaType === "application/pdf") {
-        blocks.push({
-          type: "document",
-          source: { type: "base64", media_type: "application/pdf", data: att.data },
-        });
-      } else if ((IMAGE_TYPES as readonly string[]).includes(att.mediaType)) {
-        blocks.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: att.mediaType as (typeof IMAGE_TYPES)[number],
-            data: att.data,
-          },
-        });
-      } else {
-        // Tekstbestand: inhoud decoderen en als tekstblok meesturen.
-        const text = Buffer.from(att.data, "base64").toString("utf-8").slice(0, 200_000);
-        blocks.push({ type: "text", text: `Inhoud van bijlage "${att.name}":\n\n${text}` });
-      }
-    }
+    const blocks: Anthropic.ContentBlockParam[] = m.attachments.map(fileBlock);
     if (m.content) blocks.push({ type: "text", text: m.content });
     return { role: m.role, content: blocks };
   });
 }
 
+// Projectdocumenten gaan als synthetische uitwisseling VOORAAN in de
+// API-berichten mee (niet opgeslagen in de chat zelf). Het laatste blok van
+// het user-bericht krijgt een cache-breakpoint, zodat de documenten maar één
+// keer per 5 minuten volledig verwerkt worden.
+function projectDocumentMessages(documents: ProjectDocument[]): Anthropic.MessageParam[] {
+  const blocks: Anthropic.ContentBlockParam[] = documents.map(fileBlock);
+  blocks.push({
+    type: "text",
+    text: "Dit zijn de documenten van dit project als achtergrondcontext.",
+    cache_control: { type: "ephemeral" },
+  });
+  return [
+    { role: "user", content: blocks },
+    { role: "assistant", content: "Begrepen — ik gebruik deze projectdocumenten als context." },
+  ];
+}
+
+// Cache-breakpoint op het laatste content-blok van het laatste bericht:
+// het aanbevolen patroon voor multi-turn gesprekken, waarbij elke beurt de
+// volledige eerdere geschiedenis uit de cache herleest.
+function withHistoryCacheBreakpoint(messages: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  const last = messages[messages.length - 1];
+  if (!last) return messages;
+  let content: Anthropic.ContentBlockParam[];
+  if (typeof last.content === "string") {
+    if (!last.content) return messages;
+    content = [
+      { type: "text", text: last.content, cache_control: { type: "ephemeral" } },
+    ];
+  } else {
+    const blocks = last.content;
+    content = blocks.map((block, i) =>
+      i === blocks.length - 1
+        ? { ...block, cache_control: { type: "ephemeral" as const } }
+        : block
+    );
+  }
+  return [...messages.slice(0, -1), { role: last.role, content }];
+}
+
 export const maxDuration = 300;
 
-const systemPrompt = (name: string) => `Je bent een zakelijke AI-assistent in Vantage, de werkruimte van ${name}.
+const systemPrompt = (name: string) => `Je bent een zakelijke AI-assistent in Vantage${name ? `, de werkruimte van ${name}` : ""}.
 Je helpt met business-vragen, strategie, analyses en algemene ondersteuning.
 Antwoord in het Nederlands (tenzij de gebruiker een andere taal gebruikt), helder en zakelijk maar toegankelijk.
-Houd antwoorden beknopt waar het kan en gestructureerd waar het helpt.`;
+Houd antwoorden beknopt waar het kan en gestructureerd waar het helpt.
+Je kunt het web doorzoeken: doe dat bij vragen over actuele ontwikkelingen, cijfers, bedrijven of nieuws, en baseer je antwoord dan op wat je vindt in plaats van op je eigen kennis.`;
 
 // Demo-modus: een mock-antwoord dat woord voor woord wordt gestreamd, zodat
 // de volledige chatflow (streamen, stoppen, regenereren, opslaan, exporteren)
@@ -104,7 +148,7 @@ function demoReply(userMessage: string): string {
     `- Antwoorden **streamen** woord voor woord het scherm in`,
     `- De **stop-knop** bewaart het gedeeltelijke antwoord`,
     `- **Opnieuw genereren** vervangt dit antwoord`,
-    `- De chat wordt opgeslagen in \`data/chats/\` en telt mee voor de export`,
+    `- De chat wordt automatisch bewaard en telt mee voor de export`,
     ``,
     `Ook syntax highlighting doet het gewoon:`,
     ``,
@@ -267,7 +311,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error:
-          "ANTHROPIC_API_KEY ontbreekt. Voeg deze toe aan .env.local, of zet demo-modus aan via Instellingen.",
+          "De AI-verbinding is nog niet ingesteld. Zet demo-modus aan via Instellingen, of vraag de beheerder de API-sleutel te configureren.",
       },
       { status: 500 }
     );
@@ -278,9 +322,11 @@ export async function POST(request: Request) {
   let system = settings.customInstructions
     ? `${basePrompt}\n\nAanvullende instructies van de gebruiker:\n${settings.customInstructions}`
     : basePrompt;
-  // Projectcontext: naam en instructies van het gekoppelde project gaan mee.
+  // Projectcontext: naam en instructies van het gekoppelde project gaan mee;
+  // de projectdocumenten gaan verderop als content blocks in de berichten mee.
+  let project: Project | null = null;
   if (chat.projectId) {
-    const project = await getProject(chat.projectId);
+    project = await getProject(chat.projectId);
     if (project) {
       system = `${system}\n\nDit gesprek hoort bij het project "${project.name}".${
         project.description ? ` ${project.description}` : ""
@@ -292,22 +338,64 @@ export async function POST(request: Request) {
   }
 
   try {
-    const stream = client.messages.stream({
+    const baseParams = {
       model: chatModel,
       max_tokens: settings.maxTokens,
       // Haiku ondersteunt geen adaptive thinking — parameter dan weglaten
       ...(chatModel.includes("haiku")
         ? {}
         : { thinking: { type: "adaptive" as const } }),
-      system,
-      messages: toApiMessages(chat.messages),
-    });
+      // Systeemprompt als tekstblok met cache-breakpoint: de (grotendeels
+      // stabiele) prompt wordt dan maar één keer per 5 minuten verwerkt.
+      system: [
+        {
+          type: "text" as const,
+          text: system,
+          cache_control: { type: "ephemeral" as const },
+        },
+      ],
+    };
+    const startStream = (msgs: Anthropic.MessageParam[], withSearch: boolean) =>
+      client.messages.stream({
+        ...baseParams,
+        messages: msgs,
+        // Webzoeken zodat de chat ook actuele vragen aankan; het model
+        // beslist zelf of zoeken nodig is.
+        ...(withSearch
+          ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 3 }] }
+          : {}),
+      });
+
+    // Gespreksgeschiedenis met incrementeel cache-breakpoint; documenten van
+    // het project gaan als synthetische uitwisseling vooraan mee (de rol-
+    // volgorde blijft kloppen: user → assistant → user …). In totaal maximaal
+    // drie breakpoints: systeemprompt, projectdocumenten en geschiedenis.
+    let apiMessages = withHistoryCacheBreakpoint(toApiMessages(chat.messages));
+    if (project?.documents?.length) {
+      apiMessages = [...projectDocumentMessages(project.documents), ...apiMessages];
+    }
+    let searchEnabled = true;
+    let stream = startStream(apiMessages, true);
 
     // Wacht op het eerste event vóór we een streaming-response starten:
     // API-fouten (billing, auth, rate limit) treden hier op en kunnen dan
     // nog als nette JSON-fout worden teruggegeven.
-    const iterator = stream[Symbol.asyncIterator]();
-    const first = await iterator.next();
+    let iterator = stream[Symbol.asyncIterator]();
+    let first: IteratorResult<Anthropic.MessageStreamEvent>;
+    try {
+      first = await iterator.next();
+    } catch (err) {
+      // Mocht webzoeken geweigerd worden (bv. i.c.m. bepaalde bijlagen),
+      // val dan terug op een gewone chat zonder zoeken.
+      if (err instanceof Anthropic.BadRequestError && !err.message.includes("credit balance")) {
+        searchEnabled = false;
+        stream = startStream(apiMessages, false);
+        iterator = stream[Symbol.asyncIterator]();
+        first = await iterator.next();
+      } else {
+        throw err;
+      }
+    }
 
     const encoder = new TextEncoder();
     let full = "";
@@ -333,15 +421,33 @@ export async function POST(request: Request) {
       await saveChat(chat);
     };
 
+    // Bronnen die het model daadwerkelijk citeert uit webzoekresultaten,
+    // om als nette lijst onder het antwoord te zetten.
+    const sources = new Map<string, string>();
+    const collectSources = (content: Anthropic.ContentBlock[]) => {
+      for (const block of content) {
+        if (block.type === "text" && Array.isArray(block.citations)) {
+          for (const c of block.citations) {
+            if (c.type === "web_search_result_location" && c.url && !sources.has(c.url)) {
+              sources.set(c.url, c.title || c.url);
+            }
+          }
+        }
+      }
+    };
+
     const readable = new ReadableStream<Uint8Array>({
       async start(controller) {
+        const emit = (text: string) => {
+          full += text;
+          controller.enqueue(encoder.encode(text));
+        };
         const handle = (event: Anthropic.MessageStreamEvent) => {
           if (
             event.type === "content_block_delta" &&
             event.delta.type === "text_delta"
           ) {
-            full += event.delta.text;
-            controller.enqueue(encoder.encode(event.delta.text));
+            emit(event.delta.text);
           }
         };
         try {
@@ -350,6 +456,25 @@ export async function POST(request: Request) {
             const { done, value } = await iterator.next();
             if (done) break;
             handle(value);
+          }
+          let final = await stream.finalMessage();
+          collectSources(final.content);
+          // Webzoeken kan de beurt pauzeren; hervat tot het antwoord af is.
+          let continuations = 0;
+          while (searchEnabled && final.stop_reason === "pause_turn" && continuations < 3) {
+            apiMessages = [...apiMessages, { role: "assistant", content: final.content }];
+            stream = startStream(apiMessages, true);
+            for await (const event of stream) handle(event);
+            final = await stream.finalMessage();
+            collectSources(final.content);
+            continuations++;
+          }
+          if (sources.size > 0) {
+            const list = [...sources.entries()]
+              .slice(0, 8)
+              .map(([url, title]) => `- [${title}](${url})`)
+              .join("\n");
+            emit(`\n\n**Bronnen**\n${list}`);
           }
           await persist();
           controller.close();
@@ -381,7 +506,7 @@ export async function POST(request: Request) {
     }
     if (err instanceof Anthropic.AuthenticationError) {
       return Response.json(
-        { error: "Ongeldige API-sleutel. Controleer ANTHROPIC_API_KEY in .env.local" },
+        { error: "De API-sleutel is ongeldig. Vraag de beheerder de configuratie te controleren." },
         { status: 500 }
       );
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import { Icon, ICONS } from "@/components/ui";
@@ -15,6 +15,26 @@ const inputCls =
 function relativeDate(iso: string) {
   return new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
 }
+
+// Bestandsgrootte netjes weergeven (kB/MB).
+function formatSize(bytes: number) {
+  return bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} kB`;
+}
+
+// Toegestane documenttypes (client-kopie van de chat-bijlagetypes).
+const DOC_TYPES: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+};
 
 // Dealfases van de pipeline (client-kopie van PROJECT_STAGES — de store
 // zelf importeert Node-modules en kan niet in de client-bundel).
@@ -312,6 +332,10 @@ function ProjectDetail({ id }: { id: string }) {
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [missing, setMissing] = useState(false);
+  // Documenten: uploadstatus en foutmelding voor de documentensectie.
+  const [uploading, setUploading] = useState(false);
+  const [docError, setDocError] = useState("");
+  const docFileRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -389,6 +413,57 @@ function ProjectDetail({ id }: { id: string }) {
     refresh();
   }
 
+  // Bestanden inlezen als base64 (zelfde patroon als de chat-bijlagen) en
+  // uploaden als projectdocument; de server valideert type en limieten.
+  async function addDocuments(files: FileList | null) {
+    if (!files || files.length === 0 || uploading) return;
+    setDocError("");
+    setUploading(true);
+    for (const file of Array.from(files)) {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const mediaType = file.type || DOC_TYPES[ext] || "";
+      if (!Object.values(DOC_TYPES).includes(mediaType)) {
+        setDocError(`"${file.name}" wordt niet ondersteund (PDF, afbeelding of tekstbestand).`);
+        continue;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setDocError(`"${file.name}" is te groot (max 5 MB per bestand).`);
+        continue;
+      }
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",", 2)[1] ?? "");
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      }).catch(() => null);
+      if (data === null) {
+        setDocError(`"${file.name}" kon niet worden gelezen.`);
+        continue;
+      }
+      try {
+        const res = await fetch(`/api/projects/${id}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, mediaType, data }),
+        });
+        if (!res.ok) {
+          setDocError((await res.json()).error ?? "Uploaden mislukt.");
+        }
+      } catch {
+        setDocError(`"${file.name}" kon niet worden geüpload.`);
+      }
+    }
+    setUploading(false);
+    if (docFileRef.current) docFileRef.current.value = "";
+    refresh();
+  }
+
+  async function removeDocument(docId: string) {
+    setDocError("");
+    await fetch(`/api/projects/${id}/documents/${docId}`, { method: "DELETE" });
+    refresh();
+  }
+
   async function removeProject() {
     if (!confirmDelete) {
       setConfirmDelete(true);
@@ -415,6 +490,7 @@ function ProjectDetail({ id }: { id: string }) {
     return <p className="px-8 py-10 text-sm text-slate-400 dark:text-slate-500">Laden…</p>;
   }
 
+  const documents = detail.project.documents ?? [];
   const linkedIds = {
     chats: new Set(detail.chats.map((c) => c.id)),
     notes: new Set(detail.notes.map((n) => n.id)),
@@ -497,6 +573,76 @@ function ProjectDetail({ id }: { id: string }) {
           rows={4}
           className={`${inputCls} mt-3 resize-y`}
         />
+      </div>
+
+      {/* Documenten */}
+      <div className="mt-6 rounded-2xl border border-slate-900/10 bg-white p-4 dark:border-white/10 dark:bg-white/[0.03]">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+            Documenten
+            {documents.length > 0 && (
+              <span className="ml-1.5 text-xs font-normal text-slate-400 dark:text-slate-500">
+                ({documents.length}/5)
+              </span>
+            )}
+          </p>
+          <button
+            onClick={() => docFileRef.current?.click()}
+            disabled={uploading || documents.length >= 5}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-900/15 px-3 py-1.5 text-xs font-medium text-slate-600 transition enabled:hover:bg-slate-900/5 disabled:opacity-40 dark:border-white/15 dark:text-slate-300 dark:enabled:hover:bg-white/5"
+          >
+            <Icon d={ICONS.paperclip} className="h-3.5 w-3.5" />
+            {uploading ? "Uploaden…" : "Document toevoegen"}
+          </button>
+          <input
+            ref={docFileRef}
+            type="file"
+            multiple
+            accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.csv"
+            onChange={(e) => addDocuments(e.target.files)}
+            className="hidden"
+          />
+        </div>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          Gaan als achtergrondcontext mee in elke chat binnen dit project — bijv. een
+          pitch deck, jaarcijfers of contractconcept. Max 5 documenten, 5 MB per bestand.
+        </p>
+        {docError && (
+          <p className="mt-2 text-xs text-red-600 dark:text-red-400" role="alert">
+            {docError}
+          </p>
+        )}
+        {documents.length > 0 && (
+          <div className="mt-3 overflow-hidden rounded-xl border border-slate-900/[0.07] dark:border-white/[0.07]">
+            {documents.map((doc, i) => (
+              <div
+                key={doc.id}
+                className={`group flex items-center gap-2.5 px-3.5 py-2.5 transition hover:bg-slate-900/5 dark:hover:bg-white/5 ${
+                  i === 0 ? "" : "border-t border-slate-900/[0.07] dark:border-white/[0.07]"
+                }`}
+              >
+                <Icon
+                  d={ICONS.report}
+                  className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500"
+                />
+                <span className="min-w-0 flex-1 truncate text-sm text-slate-800 dark:text-slate-200">
+                  {doc.name}
+                </span>
+                <span className="shrink-0 text-[11px] tabular-nums text-slate-400 dark:text-slate-600">
+                  {formatSize(doc.size)}
+                </span>
+                <button
+                  onClick={() => removeDocument(doc.id)}
+                  title="Document verwijderen"
+                  aria-label={`Document ${doc.name} verwijderen`}
+                  className="hidden shrink-0 rounded p-1 text-slate-400 transition hover:text-red-500 group-hover:block dark:hover:text-red-400"
+                >
+                  <Icon d={ICONS.trash} className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Gekoppelde items */}
